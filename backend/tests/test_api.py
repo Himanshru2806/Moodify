@@ -42,6 +42,57 @@ def test_recommendations_return_ranked_items() -> None:
     assert body["items"][0]["rank"] == 1
 
 
+def test_corrected_expression_changes_catalogue_ranking_without_changing_goal() -> None:
+    request = {
+        "listening_goal": "help_me_focus",
+        "languages": [],
+        "genres": [],
+        "limit": 5,
+    }
+    happy_response = client.post(
+        "/api/v1/recommendations",
+        json={**request, "expression": "happy"},
+    )
+    sad_response = client.post(
+        "/api/v1/recommendations",
+        json={**request, "expression": "sad"},
+    )
+
+    assert happy_response.status_code == sad_response.status_code == 200
+    happy_body = happy_response.json()
+    sad_body = sad_response.json()
+    assert happy_body["listening_goal"] == sad_body["listening_goal"] == "help_me_focus"
+    assert happy_body["expression"] == "happy"
+    assert sad_body["expression"] == "sad"
+    assert [item["track"]["id"] for item in happy_body["items"]] != [
+        item["track"]["id"] for item in sad_body["items"]
+    ]
+
+
+def test_listening_goal_changes_ranking_independently_of_expression() -> None:
+    request = {
+        "expression": None,
+        "languages": [],
+        "genres": [],
+        "limit": 5,
+    }
+    focus_response = client.post(
+        "/api/v1/recommendations",
+        json={**request, "listening_goal": "help_me_focus"},
+    )
+    energize_response = client.post(
+        "/api/v1/recommendations",
+        json={**request, "listening_goal": "energize_me"},
+    )
+
+    assert focus_response.status_code == energize_response.status_code == 200
+    focus_body = focus_response.json()
+    energize_body = energize_response.json()
+    assert focus_body["expression"] is energize_body["expression"] is None
+    assert focus_body["items"][0]["track"]["id"] == "trk_005"
+    assert energize_body["items"][0]["track"]["id"] == "trk_003"
+
+
 class FakeExpressionModel:
     version = "fake-fer-v1"
 

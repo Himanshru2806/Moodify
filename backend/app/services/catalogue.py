@@ -10,6 +10,7 @@ TRACKS: list[Track] = [
         genre="indie",
         energy=0.62,
         tags=["uplifting", "warm", "focus"],
+        expression_affinities={"happy": 1.0, "surprise": 0.5},
         source_url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
     ),
     Track(
@@ -20,6 +21,7 @@ TRACKS: list[Track] = [
         genre="ambient",
         energy=0.22,
         tags=["calm", "relax", "comfort"],
+        expression_affinities={"sad": 1.0, "neutral": 0.5},
         source_url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
     ),
     Track(
@@ -30,6 +32,7 @@ TRACKS: list[Track] = [
         genre="pop",
         energy=0.84,
         tags=["energizing", "upbeat", "dance"],
+        expression_affinities={"happy": 0.5, "surprise": 1.0},
         source_url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
     ),
     Track(
@@ -40,6 +43,7 @@ TRACKS: list[Track] = [
         genre="acoustic",
         energy=0.34,
         tags=["reflective", "comfort", "calm"],
+        expression_affinities={"sad": 0.75, "neutral": 0.5},
         source_url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
     ),
     Track(
@@ -50,6 +54,7 @@ TRACKS: list[Track] = [
         genre="lofi",
         energy=0.48,
         tags=["focus", "steady", "calm"],
+        expression_affinities={"neutral": 1.0},
         source_url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
     ),
 ]

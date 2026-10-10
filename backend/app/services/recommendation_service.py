@@ -11,6 +11,7 @@ GOAL_TAGS: dict[str, set[str]] = {
     "energize_me": {"energizing", "upbeat", "dance"},
     "help_me_focus": {"focus", "steady", "calm"},
 }
+EXPRESSION_AFFINITY_WEIGHT = 0.5
 
 
 def recommend_tracks(request: RecommendationRequest) -> RecommendationResponse:
@@ -44,6 +45,12 @@ def _score_track(track: Track, request: RecommendationRequest) -> Recommendation
     if request.genres and track.genre in request.genres:
         score += 1.0
         reasons.append(f"Matches genre: {track.genre}")
+
+    if request.expression is not None:
+        expression_affinity = track.expression_affinities.get(request.expression, 0.0)
+        if expression_affinity:
+            score += expression_affinity * EXPRESSION_AFFINITY_WEIGHT
+            reasons.append(f"Small catalogue context match: {request.expression}")
 
     score += track.energy
     if not reasons:

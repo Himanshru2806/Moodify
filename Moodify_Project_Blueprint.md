@@ -102,7 +102,7 @@ flowchart TD
     K[ML Training and Evaluation Pipeline] --> D
 ```
 
-For the first version, keep inference in the Python backend. This makes model versioning and latency measurement consistent. Send only the image needed for the current request and discard it after inference by default.
+For the first version, keep inference in the Python backend. This makes model versioning and latency measurement consistent. The backend must not retain uploaded images. The browser may retain a photo only after separate, explicit opt-in to a local personal dataset; local browser storage is not encrypted or account-isolated and must not feed shared training.
 
 For live mode, sample frames at a controlled interval rather than uploading every frame. Smooth predictions across a short window to reduce flicker and avoid rebuilding playlists on every frame.
 
@@ -208,7 +208,16 @@ CK+ may help explore generalization beyond FER-2013. Access is governed by its t
 
 ### Dataset recommendation
 
-Start with FER-2013. Add FER+ only if time allows. Do not make the project dependent on access to a second dataset.
+Start with a manifest-based experiment that compares the pinned model on each permitted source. Subject to official
+access and use terms, use a varied still-image dataset such as AffectNet as an additional fine-tuning source. FER+ may
+be used for annotation-disagreement or soft-label experiments, but it re-annotates FER-2013 and is not an independent
+image source. Keep video datasets such as FERV39k separate for domain evaluation or later temporal modeling. Do not
+download or combine sources before checking terms, subject/video splits, duplicates, and label compatibility.
+
+The repository includes an initial local-manifest audit, loader, source-balanced fine-tuning, label alignment, and
+source-wise evaluation scaffold under `ml/src/`. It does not fetch data or replace the production model. See
+`ml/README.md` for the manifest contract and local workflow. Raw data access and license compliance remain the
+operator's responsibility.
 
 ### Data preparation pipeline
 

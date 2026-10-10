@@ -1,10 +1,20 @@
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
+import { ChangeEvent, useEffect, useRef, useState } from 'react';
 
-import { getHealth, getRecommendations, predictExpression } from './services/api';
-import type { ExpressionLabel, ExpressionPrediction, ListeningGoal, RecommendationItem } from './types';
+import { getHealth, predictExpression } from './services/api';
+import {
+  clearPersonalDataset,
+  createContributionId,
+  deletePersonalDatasetContribution,
+  listPersonalDatasetContributions,
+  savePersonalDatasetContribution,
+} from './services/personalDataset';
+import { getPlaylistChoices } from './services/playlistOptions';
+import { getYouTubePlaylistSearchUrl } from './services/streaming';
+import type { ExpressionLabel, ExpressionPrediction } from './types';
+import type { PersonalDatasetContribution } from './services/personalDataset';
 
 const expressionOptions: Array<{ value: ExpressionLabel | ''; label: string }> = [
-  { value: '', label: 'Manual only' },
+  { value: '', label: 'No specific mood' },
   { value: 'happy', label: 'Happy' },
   { value: 'sad', label: 'Sad' },
   { value: 'neutral', label: 'Neutral' },
@@ -14,32 +24,45 @@ const expressionOptions: Array<{ value: ExpressionLabel | ''; label: string }> =
   { value: 'disgust', label: 'Disgust' },
 ];
 
-const goalOptions: Array<{ value: ListeningGoal; label: string }> = [
-  { value: 'comfort_me', label: 'Comfort me' },
-  { value: 'lift_my_mood', label: 'Lift my mood' },
-  { value: 'match_my_current_vibe', label: 'Match my current vibe' },
-  { value: 'help_me_relax', label: 'Help me relax' },
-  { value: 'energize_me', label: 'Energize me' },
-  { value: 'help_me_focus', label: 'Help me focus' },
-];
-
 export function App() {
+  const [activePage, setActivePage] = useState<'home' | 'dataset' | 'playlists'>(() => {
+    if (window.location.hash === '#personal-dataset') return 'dataset';
+    if (window.location.hash === '#playlists') return 'playlists';
+    return 'home';
+  });
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const predictionSectionRef = useRef<HTMLElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const currentPhotoRef = useRef<{ id: string; image: Blob; filename: string } | null>(null);
+  const predictionRequestIdRef = useRef(0);
   const [apiStatus, setApiStatus] = useState('checking');
   const [expression, setExpression] = useState<ExpressionLabel | ''>('');
   const [prediction, setPrediction] = useState<ExpressionPrediction | null>(null);
-  const [goal, setGoal] = useState<ListeningGoal>('help_me_focus');
-  const [languages, setLanguages] = useState('English,Hindi,Instrumental');
-  const [genres, setGenres] = useState('indie,pop,lofi');
-  const [items, setItems] = useState<RecommendationItem[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [predicting, setPredicting] = useState(false);
-  const currentSelections = useRef({ expression, goal, languages, genres });
-  currentSelections.current = { expression, goal, languages, genres };
+  const [contributionConsent, setContributionConsent] = useState(false);
+  const [contributionSaving, setContributionSaving] = useState(false);
+  const [contributionError, setContributionError] = useState<string | null>(null);
+  const [contributionSavedFor, setContributionSavedFor] = useState<{ id: string; expression: ExpressionLabel } | null>(null);
+  const [personalDataset, setPersonalDataset] = useState<PersonalDatasetContribution[]>([]);
+  const [personalDatasetError, setPersonalDatasetError] = useState<string | null>(null);
+
+  useEffect(() => {
+    function updatePageFromHash() {
+      if (window.location.hash === '#personal-dataset') {
+        setActivePage('dataset');
+      } else if (window.location.hash === '#playlists') {
+        setActivePage('playlists');
+      } else {
+        setActivePage('home');
+      }
+    }
+
+    window.addEventListener('hashchange', updatePageFromHash);
+    return () => window.removeEventListener('hashchange', updatePageFromHash);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +87,22 @@ export function App() {
 
   useEffect(() => {
     return () => stopCamera();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listPersonalDatasetContributions()
+      .then((records) => {
+        if (!cancelled) setPersonalDataset(records);
+      })
+      .catch((loadError: unknown) => {
+        if (!cancelled) {
+          setPersonalDatasetError(loadError instanceof Error ? loadError.message : 'Could not read this browser’s personal dataset.');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function startCamera() {
@@ -128,203 +167,367 @@ export function App() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    await handlePrediction(file, file.name);
     event.target.value = '';
+    await handlePrediction(file, file.name);
   }
 
   async function handlePrediction(image: Blob, filename: string) {
+    const requestId = ++predictionRequestIdRef.current;
+    currentPhotoRef.current = { id: createContributionId(), image, filename };
     setPredicting(true);
     setCameraError(null);
-    setError(null);
     setPrediction(null);
-    setItems([]);
+    setExpression('');
+    setContributionConsent(false);
+    setContributionError(null);
+    setContributionSavedFor(null);
+
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    predictionSectionRef.current?.scrollIntoView({
+      behavior: reduceMotion ? 'auto' : 'smooth',
+      block: 'center',
+    });
 
     try {
       const result = await predictExpression(image, filename);
+      if (requestId !== predictionRequestIdRef.current) return;
       setPrediction(result);
       setExpression(result.expression ?? '');
-      await requestRecommendations(result.expression);
     } catch (requestError) {
-      setCameraError(requestError instanceof Error ? requestError.message : 'Unable to predict expression.');
+      if (requestId === predictionRequestIdRef.current) {
+        setCameraError(requestError instanceof Error ? requestError.message : 'Unable to predict expression.');
+      }
     } finally {
-      setPredicting(false);
+      if (requestId === predictionRequestIdRef.current) setPredicting(false);
     }
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await requestRecommendations(expression || null);
+  function showPlaylistChoices() {
+    stopCamera();
+    window.location.hash = '#playlists';
   }
 
-  async function requestRecommendations(selectedExpression: ExpressionLabel | null) {
-    setLoading(true);
-    setError(null);
-    setItems([]);
-    const selections = currentSelections.current;
+  function clearPrediction() {
+    predictionRequestIdRef.current += 1;
+    currentPhotoRef.current = null;
+    setPrediction(null);
+    setExpression('');
+    setPredicting(false);
+    setCameraError(null);
+    setContributionConsent(false);
+    setContributionSaving(false);
+    setContributionError(null);
+    setContributionSavedFor(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
 
+  function handleExpressionCorrection(event: ChangeEvent<HTMLSelectElement>) {
+    const correctedExpression = event.target.value as ExpressionLabel | '';
+    setExpression(correctedExpression);
+    setContributionConsent(false);
+    setContributionError(null);
+  }
+
+  async function handleSavePersonalContribution() {
+    const photo = currentPhotoRef.current;
+    if (!photo || !expression || !contributionConsent || predicting || contributionSaving || contributionSavedFor) return;
+
+    const requestId = predictionRequestIdRef.current;
+    setContributionSaving(true);
+    setContributionError(null);
     try {
-      const response = await getRecommendations({
-        expression: selectedExpression,
-        listening_goal: selections.goal,
-        languages: splitCsv(selections.languages),
-        genres: splitCsv(selections.genres),
-        limit: 5,
+      await savePersonalDatasetContribution({
+        id: photo.id,
+        image: photo.image,
+        expression,
       });
-      setItems(response.items);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to fetch recommendations.');
+      const records = await listPersonalDatasetContributions();
+      if (requestId !== predictionRequestIdRef.current) return;
+      setPersonalDataset(records);
+      setContributionSavedFor({ id: photo.id, expression });
+      setContributionConsent(false);
+    } catch (saveError) {
+      if (requestId === predictionRequestIdRef.current) {
+        setContributionError(saveError instanceof Error ? saveError.message : 'Could not save this photo locally.');
+      }
     } finally {
-      setLoading(false);
+      if (requestId === predictionRequestIdRef.current) setContributionSaving(false);
     }
   }
+
+  async function handleDeletePersonalContribution(id: string) {
+    try {
+      await deletePersonalDatasetContribution(id);
+      setPersonalDataset(await listPersonalDatasetContributions());
+      setContributionSavedFor((saved) => saved?.id === id ? null : saved);
+      setPersonalDatasetError(null);
+    } catch (deleteError) {
+      setPersonalDatasetError(deleteError instanceof Error ? deleteError.message : 'Could not delete this contribution.');
+    }
+  }
+
+  async function handleClearPersonalDataset() {
+    if (!window.confirm('Delete every locally stored photo in this browser profile? This cannot be undone.')) return;
+    try {
+      await clearPersonalDataset();
+      setPersonalDataset([]);
+      setContributionSavedFor(null);
+      setPersonalDatasetError(null);
+    } catch (clearError) {
+      setPersonalDatasetError(clearError instanceof Error ? clearError.message : 'Could not clear this personal dataset.');
+    }
+  }
+
+  const playlistChoices = getPlaylistChoices(expression || null);
+  const expressionName = expression ? `${expression[0].toUpperCase()}${expression.slice(1)}` : '';
+  const moodHeading = expression
+    ? expression === prediction?.expression
+      ? `Your visible expression seems ${expressionName}`
+      : `You selected ${expressionName}`
+    : 'Choose a playlist for your vibe';
 
   return (
-    <main className="app-shell">
+    <div className="app-shell">
+      <header className="site-header">
+        <a className="brand-link" href="#home" aria-label="Moodify home">
+          <span className="brand-mark" aria-hidden="true">M</span>
+          <span>Moodify</span>
+        </a>
+        <nav className="primary-nav" aria-label="Main navigation">
+          <a href="#home" aria-current={activePage === 'home' ? 'page' : undefined}>Discover</a>
+          <a href="#playlists" aria-current={activePage === 'playlists' ? 'page' : undefined}>Playlist ideas</a>
+          <a href="#personal-dataset" aria-current={activePage === 'dataset' ? 'page' : undefined}>My dataset</a>
+        </nav>
+        <a className="header-cta" href="#playlists" onClick={stopCamera}>Create playlist</a>
+        <div className={`status-pill ${apiStatus === 'ok' ? 'online' : ''}`} aria-label={`API status: ${apiStatus}`}>
+          <span className="status-indicator" aria-hidden="true" />
+          API {apiStatus}
+        </div>
+      </header>
+
+      <main>
+      {activePage === 'home' ? (
+        <>
       <section className="hero-card">
         <div>
           <p className="eyebrow">Expression-aware music discovery</p>
-          <h1>Moodify</h1>
+          <h1>Find your next mood.</h1>
           <p className="hero-copy">
-            Capture a moment, choose your listening goal, and get a playlist shaped by visible expression cues,
-            preferences, and track metadata while keeping you in control.
+            Visible expression can spark playlist ideas—not reveal how you feel.
           </p>
         </div>
-        <div className={`status-pill ${apiStatus === 'ok' ? 'online' : ''}`}>API: {apiStatus}</div>
-      </section>
-
-      <section className="grid">
-        <article className="panel camera-panel">
-          <p className="eyebrow">Expression input</p>
-          <h2>Upload or camera capture</h2>
-          <p>
-            Capture or upload a clear, front-facing photo. Moodify estimates a visible expression, then builds a
-            playlist from that estimate and your listening preferences. Photos are processed without being saved.
-          </p>
-          <div className="camera-preview">
-            <video ref={videoRef} autoPlay muted playsInline aria-label="Live camera preview" />
-            {!cameraActive ? <span>Camera preview</span> : null}
-          </div>
-          <div className="camera-actions">
-            {!cameraActive ? (
-              <button type="button" onClick={startCamera}>
-                Start camera
-              </button>
+        <div className="quick-actions" aria-label="Mood and photo controls">
+          <section className="emotion-prediction" aria-labelledby="emotion-prediction-title" ref={predictionSectionRef}>
+            <p className="eyebrow" id="emotion-prediction-title">Emotion prediction</p>
+            {prediction ? (
+              <div className="prediction-card" role="status" aria-live="polite">
+                <strong>Visible-expression estimate: {prediction.status.replaceAll('_', ' ')}</strong>
+                <span>
+                  Detected expression: {prediction.expression ?? 'not available'} | Confidence:{' '}
+                  {Math.round(prediction.confidence * 100)}%
+                </span>
+                <small>Model: {prediction.model_version}</small>
+              </div>
+            ) : predicting ? (
+              <div className="prediction-card" role="status" aria-live="polite">
+                <strong>Analyzing your photo…</strong>
+                <span>Your estimate will appear here.</span>
+              </div>
             ) : (
-              <button type="button" onClick={stopCamera}>
-                Stop camera
-              </button>
+              <div className="prediction-card prediction-placeholder" role="status" aria-live="polite">
+                <strong>Your expression estimate will appear here</strong>
+                <span>Capture or upload a photo to get started.</span>
+              </div>
             )}
-            <button type="button" onClick={capturePhoto} disabled={!cameraActive || predicting || loading}>
-              {loading ? 'Building playlist...' : predicting ? 'Analyzing photo...' : 'Click photo'}
-            </button>
-          </div>
-          <label className="file-picker">
-            Upload image
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={handleFileSelected}
-              disabled={predicting || loading}
-            />
-          </label>
-          {prediction ? (
-            <div className="prediction-card">
-              <strong>Status: {prediction.status.replaceAll('_', ' ')}</strong>
-              <span>
-                Expression: {prediction.expression ?? 'not available'} | Confidence:{' '}
-                {Math.round(prediction.confidence * 100)}%
-              </span>
-              <small>Model: {prediction.model_version}</small>
+            <div className="prediction-actions">
+              <button type="button" onClick={showPlaylistChoices} disabled={predicting}>
+                Show Playlist
+              </button>
+              <button type="button" className="secondary-action" onClick={clearPrediction}>
+                Clear
+              </button>
             </div>
-          ) : null}
-          {cameraError ? <p className="camera-error">{cameraError}</p> : null}
-        </article>
-
-        <form className="panel form-panel" onSubmit={handleSubmit}>
-          <p className="eyebrow">Playlist preferences</p>
-          <h2>Build a playlist</h2>
-          <label>
-            Expression
-            <select value={expression} onChange={(event) => setExpression(event.target.value as ExpressionLabel | '')}>
-              {expressionOptions.map((option) => (
-                <option key={option.label} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Listening goal
-            <select value={goal} onChange={(event) => setGoal(event.target.value as ListeningGoal)}>
-              {goalOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Languages
-            <input value={languages} onChange={(event) => setLanguages(event.target.value)} />
-          </label>
-          <label>
-            Genres
-            <input value={genres} onChange={(event) => setGenres(event.target.value)} />
-          </label>
-          <button type="submit" disabled={loading || predicting}>
-            {loading ? 'Ranking...' : 'Get recommendations'}
-          </button>
-          {error ? <p className="error">{error}</p> : null}
-        </form>
-      </section>
-
-      <section className="panel results-panel">
-        <div className="results-heading">
-          <p className="eyebrow">Ranked output</p>
-          <h2>Recommended tracks</h2>
-        </div>
-        {items.length === 0 ? (
-          <p className="empty-state">
-            {predicting || loading
-              ? 'Building your playlist…'
-              : 'Upload or capture a photo to get recommendations, or choose your preferences and build a playlist.'}
-          </p>
-        ) : (
-          <ol className="track-list">
-            {items.map((item) => (
-              <li key={item.track.id}>
-                <span className="rank">#{item.rank}</span>
-                <div>
-                  <h3>{item.track.title}</h3>
-                  <p>
-                    {item.track.artist} | {item.track.language} | {item.track.genre} | score {item.score}
+            {prediction ? (
+              <div className="correction-control">
+                <label htmlFor="expression-correction">
+                  {prediction.expression ? 'Correct detected expression' : 'Choose an expression (optional)'}
+                  <select
+                    id="expression-correction"
+                    value={expression}
+                    onChange={handleExpressionCorrection}
+                    disabled={predicting}
+                  >
+                    {expressionOptions.map((option) => (
+                      <option key={option.label} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <small>
+                  {expression
+                    ? `Selected mood: ${expressionName}. This does not change the model estimate.`
+                    : 'No mood selected. You can browse general playlist styles.'}
+                </small>
+              </div>
+            ) : null}
+            {prediction?.expression && expression && expression !== prediction.expression && currentPhotoRef.current ? (
+              <div className="contribution-consent">
+                {contributionSavedFor?.id === currentPhotoRef.current.id ? (
+                  <p role="status">
+                    Saved locally with your label “{contributionSavedFor.expression}”. This photo is not uploaded for
+                    training; personal model training is not implemented yet.
                   </p>
-                  <small>{item.reasons.join(' | ')}</small>
-                  {item.track.source_url ? (
-                    <div className="track-player">
-                      <audio controls preload="none" src={item.track.source_url}>
-                        <a href={item.track.source_url}>Play {item.track.title}</a>
-                      </audio>
-                      <a href={item.track.source_url} target="_blank" rel="noreferrer">
-                        Open song
-                      </a>
-                    </div>
-                  ) : (
-                    <p className="unavailable-track">No playable source configured yet.</p>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
+                ) : (
+                  <>
+                    <label className="consent-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={contributionConsent}
+                        onChange={(event) => setContributionConsent(event.target.checked)}
+                        disabled={contributionSaving}
+                      />
+                      I consent to save this photo and my corrected expression label in this browser’s personal dataset.
+                      It will not be shared for training or change the shared model.
+                    </label>
+                    <small>
+                      This stays in this browser profile and is not encrypted. The inference upload is not retained by
+                      the backend. You can delete saved photos on <a href="#personal-dataset">My dataset</a>.
+                    </small>
+                    <button
+                      type="button"
+                      onClick={handleSavePersonalContribution}
+                      disabled={!contributionConsent || contributionSaving || predicting}
+                    >
+                      {contributionSaving ? 'Saving locally…' : 'Save photo for my personal dataset'}
+                    </button>
+                  </>
+                )}
+                {contributionError ? <p className="camera-error" role="alert">{contributionError}</p> : null}
+              </div>
+            ) : null}
+          </section>
+          <div className="capture-controls">
+            <p className="eyebrow">Photo capture</p>
+            <div className="camera-preview">
+              <video ref={videoRef} autoPlay muted playsInline aria-label="Live camera preview" />
+              {!cameraActive ? <span>Camera preview</span> : null}
+            </div>
+            <div className="camera-actions">
+              {!cameraActive ? (
+                <button type="button" onClick={startCamera}>
+                  Start camera
+                </button>
+              ) : (
+                <button type="button" onClick={stopCamera}>
+                  Stop camera
+                </button>
+              )}
+              <button type="button" onClick={capturePhoto} disabled={!cameraActive || predicting}>
+                {predicting ? 'Analyzing photo...' : 'Click photo'}
+              </button>
+              <label className="file-picker">
+                Upload image
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handleFileSelected}
+                  disabled={predicting}
+                />
+              </label>
+            </div>
+          </div>
+          {cameraError ? <p className="camera-error" role="alert">{cameraError}</p> : null}
+        </div>
       </section>
-    </main>
-  );
-}
 
-function splitCsv(value: string): string[] {
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
+        </>
+      ) : activePage === 'dataset' ? (
+        <section className="dataset-page" aria-labelledby="personal-dataset-title">
+          <div className="dataset-page-heading">
+            <p className="eyebrow">Private to this browser profile</p>
+            <h1 id="personal-dataset-title">My personal dataset</h1>
+            <p>Review and manage the photos you explicitly chose to save on this device.</p>
+          </div>
+          <section className="panel personal-dataset-panel" aria-label="Saved photos">
+        <div className="results-heading">
+          <h2>Saved photos</h2>
+          <p>
+            {personalDataset.length} opted-in photo{personalDataset.length === 1 ? '' : 's'} saved locally. None is sent
+            to Moodify’s server or shared/global training. Personal model training is not implemented yet.
+          </p>
+        </div>
+        {personalDatasetError ? <p className="error" role="alert">{personalDatasetError}</p> : null}
+        {personalDataset.length > 0 ? (
+          <>
+            <ul className="personal-dataset-list">
+              {personalDataset.map((record) => (
+                <li key={record.id}>
+                  <span>
+                    {record.expression} · saved {new Date(record.createdAt).toLocaleString()}
+                  </span>
+                  <button type="button" onClick={() => void handleDeletePersonalContribution(record.id)}>
+                    Delete photo
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="danger-button" onClick={() => void handleClearPersonalDataset()}>
+              Delete all personal photos
+            </button>
+          </>
+        ) : (
+          <div className="empty-dataset-state">
+            <p className="empty-state">No photos are saved. Contributions require consent for each photo.</p>
+            <a href="#home">Go to Discover to add a photo</a>
+          </div>
+        )}
+          </section>
+          <aside className="privacy-note">
+            <span className="privacy-icon" aria-hidden="true">🔒</span>
+            <div>
+              <h2>Your photos stay in this browser</h2>
+              <p>Saved items are stored locally and are not used for shared training. Anyone with access to this browser profile may be able to view them. You can remove one photo or clear the entire dataset here.</p>
+            </div>
+          </aside>
+        </section>
+      ) : (
+        <section className="playlist-page" aria-labelledby="playlist-heading">
+          <div className="dataset-page-heading">
+            <p className="eyebrow">Playlist ideas</p>
+            <h1 id="playlist-heading">{moodHeading}</h1>
+            <p>
+              {expression
+                ? 'Your expression is only a suggestion. Choose the soundtrack that feels right to you.'
+                : 'Explore a mix of playlist styles, or go back to Discover to choose a mood.'}
+            </p>
+          </div>
+          <section className="panel results-panel" aria-label="Recommended playlists">
+            <ul className="playlist-choice-list">
+              {playlistChoices.map((choice) => (
+                <li key={choice.label}>
+                  <a
+                    className="playlist-choice"
+                    href={getYouTubePlaylistSearchUrl(choice.searchQuery)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <span>
+                      <strong>{choice.label}</strong>
+                      <small>{choice.description}</small>
+                    </span>
+                    <span className="playlist-choice-arrow" aria-hidden="true">↗</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+          <a className="back-to-discover" href="#home">← Back to Discover</a>
+        </section>
+      )}
+      </main>
+      <footer className="site-footer">Moodify · Choose what feels right for you.</footer>
+    </div>
+  );
 }

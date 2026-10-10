@@ -31,8 +31,12 @@
 - [ ] Implement browser camera permission flow.
 - [x] Implement captured-photo prediction and automatic playlist generation.
 - [x] Implement upload-to-prediction flow and automatic playlist generation.
-- [ ] Add manual correction for predicted expression.
+- [x] Add manual correction for predicted expression and immediate playlist reranking.
+- [ ] Add browser-local sampled face tracking and a separate smile cue.
+- [ ] Add live-estimate smoothing and stable/explicit recommendation triggers.
 - [ ] Add feedback controls on recommended tracks.
+- [x] Add explicit per-photo opt-in to a browser-local personal photo/label set with deletion controls.
+- [ ] Implement isolated per-user model training only after account identity, secure storage, deletion and evaluation design.
 
 ## Evaluation
 
@@ -41,3 +45,7 @@
 - [ ] Add end-to-end happy path test.
 - [ ] Measure inference latency on stated hardware.
 - [ ] Write model card and limitations section.
+- [ ] Audit access terms and prepare grouped multi-dataset manifests for fine-tuning.
+- [x] Add local FER-2013 and FER+ CSV-to-manifest conversion with split/vote validation.
+- [ ] Add access-reviewed AffectNet and FERV39k adapters when their exact local layouts and permitted uses are established.
+- [ ] Compare pinned baseline and candidate model on untouched per-source held-out test sets.
