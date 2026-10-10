@@ -15,7 +15,7 @@
 - [ ] Train custom CNN baseline.
 - [ ] Fine-tune compact pretrained model.
 - [ ] Add face detection and crop pipeline.
-- [ ] Integrate selected checkpoint with FastAPI.
+- [x] Integrate pinned pretrained checkpoint with FastAPI inference.
 - [ ] Add uncertainty policy selected on validation data.
 
 ## Recommendations
@@ -29,8 +29,8 @@
 ## Frontend
 
 - [ ] Implement browser camera permission flow.
-- [ ] Implement captured-photo prediction.
-- [ ] Implement upload-to-prediction flow.
+- [x] Implement captured-photo prediction and automatic playlist generation.
+- [x] Implement upload-to-prediction flow and automatic playlist generation.
 - [ ] Add manual correction for predicted expression.
 - [ ] Add feedback controls on recommended tracks.
 

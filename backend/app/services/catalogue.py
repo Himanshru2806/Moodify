@@ -10,6 +10,7 @@ TRACKS: list[Track] = [
         genre="indie",
         energy=0.62,
         tags=["uplifting", "warm", "focus"],
+        source_url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
     ),
     Track(
         id="trk_002",
@@ -19,6 +20,7 @@ TRACKS: list[Track] = [
         genre="ambient",
         energy=0.22,
         tags=["calm", "relax", "comfort"],
+        source_url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
     ),
     Track(
         id="trk_003",
@@ -28,6 +30,7 @@ TRACKS: list[Track] = [
         genre="pop",
         energy=0.84,
         tags=["energizing", "upbeat", "dance"],
+        source_url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
     ),
     Track(
         id="trk_004",
@@ -37,6 +40,7 @@ TRACKS: list[Track] = [
         genre="acoustic",
         energy=0.34,
         tags=["reflective", "comfort", "calm"],
+        source_url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
     ),
     Track(
         id="trk_005",
@@ -46,5 +50,6 @@ TRACKS: list[Track] = [
         genre="lofi",
         energy=0.48,
         tags=["focus", "steady", "calm"],
+        source_url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
     ),
 ]

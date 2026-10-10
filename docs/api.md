@@ -14,9 +14,19 @@ Returns service status.
 
 Multipart form field: `image`
 
-Supported image types: JPEG, PNG, WebP.
+Supported image types: JPEG, PNG, WebP. The file is decoded, the largest detected frontal face is cropped, and a local
+pretrained FER-2013 classifier returns probabilities for the seven supported expression labels. Original images are
+not stored.
 
-Current status: validates input and returns `model_not_configured` until the ML model is integrated.
+Statuses are `prediction_available` and `uncertain`. The expression is `null` when the configured confidence cutoff is
+not met. Invalid images and photos with no detected face return HTTP 422; oversized uploads return HTTP 413; a missing
+local checkpoint returns HTTP 503. Install the pinned checkpoint from the backend directory with
+`python -m app.services.model_download` (about 343 MB) before starting the API. The model version identifies the
+upstream checkpoint revision.
+
+The frontend automatically requests recommendations after a photo prediction, using the predicted expression when
+available and the currently selected listening goal, languages, and genres. For an uncertain prediction it uses the
+goal and preferences without inventing an expression. Users can still correct the expression or rerun recommendations.
 
 ## Recommendations
 

@@ -1,5 +1,15 @@
 export type ExpressionLabel = 'angry' | 'disgust' | 'fear' | 'happy' | 'sad' | 'surprise' | 'neutral';
 
+export type PredictionStatus = 'prediction_available' | 'uncertain';
+
+export interface ExpressionPrediction {
+  expression: ExpressionLabel | null;
+  confidence: number;
+  probabilities: Record<ExpressionLabel, number>;
+  status: PredictionStatus;
+  model_version: string;
+}
+
 export type ListeningGoal =
   | 'comfort_me'
   | 'lift_my_mood'

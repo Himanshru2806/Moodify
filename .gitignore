@@ -20,9 +20,11 @@ data/datasets/
 ml/checkpoints/
 ml/reports/*.png
 ml/reports/*.csv
+backend/models/
 *.pt
 *.pth
 *.onnx
+*.safetensors
 
 # OS/editor
 .DS_Store

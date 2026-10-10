@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 ExpressionLabel = Literal["angry", "disgust", "fear", "happy", "sad", "surprise", "neutral"]
-PredictionStatus = Literal["prediction_available", "uncertain", "model_not_configured"]
+PredictionStatus = Literal["prediction_available", "uncertain"]
 
 
 class ExpressionPrediction(BaseModel):

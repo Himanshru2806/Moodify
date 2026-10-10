@@ -1,13 +1,13 @@
 # Moodify
 
-Moodify is a final-year project web application for facial-expression recognition and user-guided music recommendations.
+Moodify is a web application for expression-aware, user-guided music recommendations.
 
-This repository currently contains the first working foundation:
+This repository contains the working first version:
 
 - FastAPI backend with versioned routes.
 - React/Vite frontend with a recommendation UI.
-- Placeholder expression endpoint that validates images but clearly reports `model_not_configured`.
-- Simple metadata-based recommendation baseline using a demo catalogue.
+- Camera capture and upload flow for expression prediction and automatic playlist recommendations.
+- Metadata-based recommendation baseline using a playable demo catalogue.
 
 ## Project Structure
 
@@ -26,8 +26,22 @@ cd backend
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+python -m app.services.model_download
 uvicorn app.main:app --reload
 ```
+
+The first model download is about 343 MB and is cached under `backend/models/` (ignored by Git). It fetches revision
+`ef0bc6fc34241b6587e7e009e7711357be28c024` of the [trpakov/vit-face-expression checkpoint](https://huggingface.co/trpakov/vit-face-expression);
+its model card declares the Apache-2.0 license and reports 71.16% test accuracy on FER-2013. That is the publisher's
+benchmark result, not a Moodify evaluation or a guarantee on webcam photos. The model runs locally on CPU after setup.
+The backend uses OpenCV's frontal-face detector and the model's published image processor; photos are discarded after
+each request.
+
+The classifier estimates visible facial-expression labels only; it does not infer a person's internal emotional
+state. The confidence cutoff defaults to 0.4 and is a configurable prototype heuristic, not a calibrated threshold.
+For a custom model directory or cutoff, set `MOODIFY_MODEL_DIR` or `MOODIFY_MODEL_MIN_CONFIDENCE` in the backend
+environment. If the download is skipped, prediction returns HTTP 503 with setup guidance. A photo with no detectable
+frontal face returns HTTP 422.
 
 Backend URL: `http://localhost:8000`
 
@@ -52,11 +66,10 @@ Frontend URL: `http://localhost:5173`
 
 ## Next Milestones
 
-1. Add camera capture and upload-to-prediction flow in the frontend.
-2. Add real face detection and preprocessing in the backend.
-3. Create the FER-2013 audit and training pipeline under `ml/`.
-4. Replace the demo catalogue with a documented, licensed catalogue source.
-5. Add persistence for preferences, feedback, and optional history.
+1. Replace the demo catalogue with a documented, licensed catalogue source.
+2. Evaluate and calibrate the expression confidence policy on held-out data.
+3. Add persistence for preferences, feedback, and optional history.
+4. Improve ranking using interaction feedback and catalogue metadata.
 
 ## Privacy Rule
 

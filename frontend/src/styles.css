@@ -133,6 +133,78 @@ h2 {
   margin: 18px 0;
 }
 
+.camera-preview {
+  position: relative;
+  display: grid;
+  min-height: 240px;
+  margin: 20px 0;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid rgba(247, 255, 236, 0.16);
+  border-radius: 24px;
+  background: radial-gradient(circle at top left, rgba(207, 231, 181, 0.22), transparent 34%), #0b110c;
+}
+
+.camera-preview video {
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.camera-preview span {
+  position: absolute;
+  color: #9eb495;
+  font-weight: 800;
+}
+
+.camera-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.camera-actions button,
+.camera-panel .file-picker {
+  border: 1px solid rgba(247, 255, 236, 0.18);
+  color: #172018;
+  background: #dff5c8;
+}
+
+.camera-panel .file-picker {
+  display: grid;
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 18px;
+  font-weight: 800;
+}
+
+.camera-panel .file-picker input {
+  margin: 8px 0 0;
+}
+
+.prediction-card {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid rgba(223, 245, 200, 0.28);
+  border-radius: 18px;
+  background: rgba(223, 245, 200, 0.1);
+}
+
+.prediction-card span,
+.prediction-card small {
+  color: #cddbc6;
+}
+
+.camera-error {
+  margin: 14px 0 0;
+  color: #ffc7b8;
+  font-weight: 800;
+}
+
 .form-panel {
   display: grid;
   gap: 16px;
@@ -202,6 +274,34 @@ select {
 .track-list p,
 .track-list small {
   color: #52614d;
+}
+
+.track-player {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.track-player audio {
+  width: min(100%, 520px);
+}
+
+.track-player a {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.55rem 0.85rem;
+  color: #f8fff5;
+  background: #25462b;
+  font-size: 0.9rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.unavailable-track {
+  margin: 12px 0 0;
+  color: #7f6c48;
+  font-size: 0.9rem;
+  font-weight: 800;
 }
 
 @media (max-width: 760px) {
