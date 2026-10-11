@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import admin, auth, expressions, health, personal_playlists, recommendations, tracks
+from app.api.routes import admin, auth, expressions, health, personal_playlists, recommendations, tracks, youtube
 from app.core.config import settings
 from app.services.admin_bootstrap import bootstrap_configured_superuser
 
@@ -41,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(tracks.router, prefix=settings.api_prefix)
     app.include_router(auth.router, prefix=settings.api_prefix)
     app.include_router(personal_playlists.router, prefix=settings.api_prefix)
+    app.include_router(youtube.router, prefix=settings.api_prefix)
     app.include_router(admin.router, prefix=settings.api_prefix)
 
     return app

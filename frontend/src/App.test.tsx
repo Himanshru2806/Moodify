@@ -25,12 +25,20 @@ import type { ExpressionPrediction } from './types';
 import type { PersonalDatasetContribution } from './services/personalDataset';
 import {
   createPersonalSong,
+  createYouTubePlaylist,
+  deletePersonalSong,
+  findYouTubeMatches,
+  getYouTubeConnection,
+  listYouTubePlaylists,
   listPersonalSongs,
   loginAccount,
   logoutAccount,
   registerAccount,
   refreshSession,
+  retryYouTubePlaylist,
+  selectYouTubeMatch,
   updateAccountProfile,
+  updatePersonalSong,
 } from './services/personalPlaylists';
 import type { PersonalSong } from './services/personalPlaylists';
 
@@ -66,15 +74,24 @@ vi.mock('./services/personalDataset', () => ({
 
 vi.mock('./services/personalPlaylists', () => ({
   createPersonalSong: vi.fn(),
+  createYouTubePlaylist: vi.fn(),
   deletePersonalSong: vi.fn(),
+  disconnectYouTube: vi.fn(),
+  findYouTubeMatches: vi.fn(),
+  getYouTubeConnection: vi.fn(),
+  listYouTubePlaylists: vi.fn(),
   listPersonalSongs: vi.fn(),
   loginAccount: vi.fn(),
   logoutAccount: vi.fn(),
   refreshSession: vi.fn(),
+  retryYouTubePlaylist: vi.fn(),
   registerAccount: vi.fn(),
   requestPasswordReset: vi.fn(),
   resetPassword: vi.fn(),
+  selectYouTubeMatch: vi.fn(),
+  startYouTubeAuthorization: vi.fn(),
   updateAccountProfile: vi.fn(),
+  updatePersonalSong: vi.fn(),
   verifyAccount: vi.fn(),
 }));
 
@@ -106,6 +123,13 @@ describe('mood playlist choices', () => {
     vi.mocked(listPersonalDatasetContributions).mockResolvedValue([]);
     vi.mocked(refreshSession).mockRejectedValue(new Error('No active session'));
     vi.mocked(listPersonalSongs).mockResolvedValue([]);
+    vi.mocked(getYouTubeConnection).mockResolvedValue({ connected: false, google_email: null });
+    vi.mocked(findYouTubeMatches).mockResolvedValue([]);
+    vi.mocked(listYouTubePlaylists).mockResolvedValue([]);
+    vi.mocked(retryYouTubePlaylist).mockResolvedValue({
+      id: 'local-playlist-1', title: 'Moodify — Happy', mood: 'happy',
+      url: 'https://www.youtube.com/playlist?list=playlist-1', status: 'created', added_count: 1, failed_song_ids: [],
+    });
     vi.mocked(listAdminUsers).mockResolvedValue([]);
     vi.mocked(getAdminMetrics).mockResolvedValue({ users_total: 0, users_verified: 0, users_suspended: 0, songs_total: 0 });
     vi.mocked(getAdminOperationalStatus).mockResolvedValue({ status: 'ok', environment: 'test', api_version: '0.1.0', database: 'ok' });
@@ -115,7 +139,7 @@ describe('mood playlist choices', () => {
     vi.mocked(loginAccount).mockResolvedValue({ email: 'listener@example.com', display_name: 'Listener', username: 'listener', access_token: 'test-access', token_type: 'bearer' });
     vi.mocked(registerAccount).mockResolvedValue({ message: 'Check your email for a verification link.' });
     vi.mocked(createPersonalSong).mockResolvedValue({
-      id: 'song-new', mood: 'happy', title: 'Here Comes the Sun', position: 1, created_at: '2026-10-11T00:00:00Z',
+      id: 'song-new', mood: 'happy', title: 'Here Comes the Sun', artist: 'The Beatles', position: 1, created_at: '2026-10-11T00:00:00Z',
     });
     vi.mocked(savePersonalDatasetContribution).mockResolvedValue('photo-test-id');
     vi.mocked(deletePersonalDatasetContribution).mockResolvedValue(undefined);
@@ -279,7 +303,7 @@ describe('mood playlist choices', () => {
 
     expect(await screen.findByRole('heading', { name: 'Moodify administration' })).toBeTruthy();
     expect(await screen.findByRole('heading', { name: 'Recommendation catalogue' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Recommendation settings' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Recommendation settings' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Recent admin actions' })).toBeTruthy();
     expect(getAdminMetrics).toHaveBeenCalledWith('owner-token');
 
@@ -349,7 +373,7 @@ describe('mood playlist choices', () => {
     expect(password.type).toBe('password');
   });
 
-  it('puts saved personal songs before built-in ideas and adds a title to the selected mood', async () => {
+  it('keeps Playlist Ideas read-only while Create Playlist can add and remove songs', async () => {
     const user = userEvent.setup();
     const song: PersonalSong = { id: 'song-1', mood: 'happy', title: 'Yellow', position: 1, created_at: '2026-10-11T00:00:00Z' };
     vi.mocked(refreshSession).mockResolvedValue({ email: 'listener@example.com', display_name: 'Listener', username: 'listener', access_token: 'test-access', token_type: 'bearer' });
@@ -362,14 +386,94 @@ describe('mood playlist choices', () => {
     const partyLink = screen.getByRole('link', { name: /Party & dance/ });
     expect(personalLink.compareDocumentPosition(partyLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(personalLink.getAttribute('href')).toContain('search_query=Yellow');
+    expect(personalLink.getAttribute('target')).toBe('_blank');
+    expect(personalLink.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(screen.queryByRole('button', { name: /Remove/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Add your own songs/ })).toBeNull();
 
-    await user.click(screen.getByRole('link', { name: /Add your own songs/ }));
+    await user.click(screen.getByRole('link', { name: 'Create playlist' }));
     await screen.findByRole('heading', { name: 'Create your playlist' });
     expect((screen.getByLabelText('Mood') as HTMLSelectElement).value).toBe('happy');
+    expect(await screen.findByRole('link', { name: /Yellow/ })).toBeTruthy();
     await user.type(screen.getByLabelText('Song title'), 'Here Comes the Sun');
+    await user.type(screen.getByLabelText('Artist'), 'The Beatles');
     await user.click(screen.getByRole('button', { name: 'Add song' }));
     expect(await screen.findByRole('link', { name: /Here Comes the Sun/ })).toBeTruthy();
-    expect(createPersonalSong).toHaveBeenCalledWith('test-access', 'happy', 'Here Comes the Sun');
+    expect(createPersonalSong).toHaveBeenCalledWith('test-access', 'happy', 'Here Comes the Sun', 'The Beatles');
+
+    await user.click(screen.getAllByRole('button', { name: 'Remove' })[0]);
+    expect(deletePersonalSong).toHaveBeenCalledWith('test-access', 'song-1');
+    await waitFor(() => expect(screen.queryByRole('link', { name: /Yellow/ })).toBeNull());
+  });
+
+  it('reviews a title-and-artist YouTube match before creating a playlist', async () => {
+    const user = userEvent.setup();
+    const match = {
+      video_id: 'youtube-video-1',
+      title: 'Yellow (2010 Remaster)',
+      channel_title: 'Coldplay Official',
+      thumbnail_url: 'https://img.youtube.com/vi/youtube-video-1/mqdefault.jpg',
+    };
+    const matchedSong: PersonalSong = {
+      id: 'song-new', mood: 'happy', title: 'Yellow', artist: 'Coldplay',
+      youtube_video_id: match.video_id, youtube_video_title: match.title,
+      youtube_channel_title: match.channel_title, youtube_thumbnail_url: match.thumbnail_url,
+      position: 1, created_at: '2026-10-11T00:00:00Z',
+    };
+    vi.mocked(refreshSession).mockResolvedValue({ email: 'listener@example.com', display_name: 'Listener', username: 'listener', access_token: 'test-access', token_type: 'bearer' });
+    vi.mocked(getYouTubeConnection).mockResolvedValue({ connected: true, google_email: 'listener@gmail.com' });
+    vi.mocked(createPersonalSong).mockResolvedValue({ ...matchedSong, youtube_video_id: null, youtube_video_title: null, youtube_channel_title: null, youtube_thumbnail_url: null });
+    vi.mocked(findYouTubeMatches).mockResolvedValue([match]);
+    vi.mocked(selectYouTubeMatch).mockResolvedValue(matchedSong);
+    vi.mocked(createYouTubePlaylist).mockResolvedValue({
+      id: 'local-playlist-1', title: 'Moodify — Happy', mood: 'happy',
+      url: 'https://www.youtube.com/playlist?list=playlist-1', status: 'created', added_count: 1, failed_song_ids: [],
+    });
+    window.history.replaceState(null, '', `${window.location.pathname}#create-playlist?mood=happy`);
+
+    render(<App />);
+    await user.type(await screen.findByLabelText('Song title'), 'Yellow');
+    await user.type(screen.getByLabelText('Artist'), 'Coldplay');
+    await user.click(screen.getByRole('button', { name: 'Add song' }));
+    await screen.findByText(/Connected as listener@gmail.com/);
+
+    await user.click(await screen.findByRole('button', { name: 'Find YouTube match' }));
+    expect(findYouTubeMatches).toHaveBeenCalledWith('test-access', 'song-new');
+    expect(await screen.findByText('Yellow (2010 Remaster)')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Use this video' }));
+
+    expect(await screen.findByText(/Matched: Yellow \(2010 Remaster\)/)).toBeTruthy();
+    const playlistTitle = screen.getByLabelText('Playlist name') as HTMLInputElement;
+    expect(playlistTitle.value).toBe('Moodify — Happy');
+    await user.click(screen.getByRole('button', { name: 'Create YouTube playlist (1 songs)' }));
+    expect(createYouTubePlaylist).toHaveBeenCalledWith('test-access', 'happy', 'Moodify — Happy');
+    const playlistLink = await screen.findByRole('link', { name: /Open “Moodify — Happy” on YouTube/ });
+    expect(playlistLink.getAttribute('href')).toBe('https://www.youtube.com/playlist?list=playlist-1');
+  });
+
+  it('lets users add artist details to legacy title-only songs', async () => {
+    const user = userEvent.setup();
+    const legacySong: PersonalSong = {
+      id: 'legacy-song', mood: 'happy', title: 'Yellow', artist: null,
+      position: 1, created_at: '2026-10-11T00:00:00Z',
+    };
+    const upgradedSong: PersonalSong = { ...legacySong, artist: 'Coldplay' };
+    vi.mocked(refreshSession).mockResolvedValue({ email: 'listener@example.com', display_name: 'Listener', username: 'listener', access_token: 'test-access', token_type: 'bearer' });
+    vi.mocked(listPersonalSongs).mockResolvedValue([legacySong]);
+    vi.mocked(updatePersonalSong).mockResolvedValue(upgradedSong);
+    window.history.replaceState(null, '', `${window.location.pathname}#create-playlist?mood=happy`);
+
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Add artist details' }));
+    const titles = screen.getAllByLabelText('Song title');
+    const artists = screen.getAllByLabelText('Artist');
+    await user.clear(titles[1]);
+    await user.type(titles[1], 'Yellow');
+    await user.type(artists[1], 'Coldplay');
+    await user.click(screen.getByRole('button', { name: 'Save song details' }));
+
+    expect(updatePersonalSong).toHaveBeenCalledWith('test-access', 'legacy-song', 'Yellow', 'Coldplay');
+    expect(await screen.findByText('Coldplay · YouTube match needed ↗')).toBeTruthy();
   });
 
   it('shows the expression correction after a prediction is available', async () => {

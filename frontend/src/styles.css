@@ -837,14 +837,33 @@ select {
   background: #f2f8ec;
 }
 
-.personal-song-list li > a {
+.personal-song-details {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 8px;
+  min-width: 0;
+}
+
+.song-edit-form {
+  display: grid;
+  gap: 10px;
+}
+
+.song-edit-form label {
+  display: grid;
+  gap: 6px;
+  color: #315b37;
+  font-weight: 800;
+}
+
+.personal-song-details > a {
   display: grid;
   gap: 5px;
   color: #172018;
   text-decoration: none;
 }
 
-.personal-song-list li > a:focus-visible {
+.personal-song-details > a:focus-visible {
   outline: 3px solid #76936b;
   outline-offset: 3px;
 }
@@ -861,6 +880,125 @@ select {
   color: #315b37;
   background: #fbfff6;
   font-weight: 800;
+}
+
+.youtube-match-channel,
+.youtube-playlist-builder small {
+  color: #63705e;
+}
+
+.youtube-match-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.youtube-match-list li {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #dce8d5;
+  border-radius: 14px;
+  padding: 8px;
+  background: #fbfff8;
+}
+
+.youtube-match-list img {
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.youtube-match-list span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.youtube-match-list strong,
+.youtube-match-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.youtube-playlist-builder {
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+  border-top: 1px solid #e1ebd9;
+  padding-top: 20px;
+}
+
+.youtube-playlist-builder .results-heading h2 {
+  margin-bottom: 6px;
+}
+
+.youtube-playlist-builder .results-heading p {
+  color: #63705e;
+}
+
+.youtube-playlist-builder > label {
+  display: grid;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.youtube-connection-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 14px;
+  padding: 12px 14px;
+  color: #315b37;
+  background: #f2f8ec;
+  font-weight: 800;
+}
+
+.youtube-playlist-history ul {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.youtube-playlist-history li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 14px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #f2f8ec;
+}
+
+.youtube-playlist-history a {
+  color: #315b37;
+  font-weight: 800;
+}
+
+.youtube-playlist-history span {
+  color: #63705e;
+}
+
+@media (max-width: 560px) {
+  .youtube-match-list li {
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+
+  .youtube-match-list img {
+    width: 76px;
+  }
+
+  .youtube-match-list button {
+    grid-column: 1 / -1;
+  }
 }
 
 .account-mode-links {

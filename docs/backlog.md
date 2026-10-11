@@ -39,6 +39,7 @@
 - [ ] Add feedback controls on recommended tracks.
 - [x] Add explicit per-photo opt-in to a browser-local personal photo/label set with deletion controls.
 - [ ] Implement isolated per-user model training only after account identity, secure storage, deletion and evaluation design.
+- [x] Add artist-based YouTube video matching, user review, Google account linking, and private mood playlist creation.
 
 ## Evaluation
 

@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     smtp_from_email: str = "noreply@moodify.local"
     smtp_starttls: bool = False
     initial_superuser_email: str | None = None
+    youtube_client_id: str | None = None
+    youtube_client_secret: str | None = None
+    youtube_redirect_uri: str | None = None
+    youtube_api_key: str | None = None
+    youtube_token_encryption_key: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="MOODIFY_")
 

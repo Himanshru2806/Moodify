@@ -101,6 +101,52 @@ class PersonalSong(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     mood: Mapped[str] = mapped_column(String(20), nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
+    artist: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    youtube_video_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    youtube_video_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    youtube_channel_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    youtube_thumbnail_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     user: Mapped[User] = relationship(back_populates="songs")
+
+
+class YouTubeConnection(Base):
+    __tablename__ = "youtube_connections"
+
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    google_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    google_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    encrypted_refresh_token: Mapped[str] = mapped_column(String(4096), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class YouTubePlaylist(Base):
+    __tablename__ = "youtube_playlists"
+    __table_args__ = (Index("ix_youtube_playlists_user_created", "user_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    mood: Mapped[str] = mapped_column(String(20), nullable=False)
+    title: Mapped[str] = mapped_column(String(150), nullable=False)
+    youtube_playlist_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="creating")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    items: Mapped[list[YouTubePlaylistItem]] = relationship(back_populates="playlist", cascade="all, delete-orphan")
+
+
+class YouTubePlaylistItem(Base):
+    __tablename__ = "youtube_playlist_items"
+    __table_args__ = (UniqueConstraint("playlist_id", "position", name="uq_youtube_playlist_items_position"),)
+
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    playlist_id: Mapped[str] = mapped_column(ForeignKey("youtube_playlists.id", ondelete="CASCADE"), nullable=False)
+    personal_song_id: Mapped[str | None] = mapped_column(ForeignKey("personal_songs.id", ondelete="SET NULL"), nullable=True)
+    youtube_video_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    artist: Mapped[str] = mapped_column(String(200), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    playlist: Mapped[YouTubePlaylist] = relationship(back_populates="items")

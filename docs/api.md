@@ -112,8 +112,40 @@ Metrics are counts of stored accounts and personal songs, not active-user analyt
 use suspension for reversible access control.
 
 Personal songs use `GET /personal-playlists/songs` (optional `?mood=happy` filter),
-`POST /personal-playlists/songs` with `{ "mood": "happy", "title": "Here Comes the Sun" }`, and
-`DELETE /personal-playlists/songs/{song_id}`. All require a verified user Bearer token. Ownership is derived from that
-token; client-supplied owner IDs are ignored/not accepted. Mood must be one of the seven expression labels, and titles
-are trimmed and limited to 200 characters. The API stores titles only; the frontend constructs a YouTube search URL
-from each title. This link is a search, not a verified exact recording or playable media URL.
+`POST /personal-playlists/songs` with `{ "mood": "happy", "title": "Here Comes the Sun", "artist": "The Beatles" }`,
+`PUT /personal-playlists/songs/{song_id}` to update title and artist, and `DELETE /personal-playlists/songs/{song_id}`.
+All require a verified user Bearer token. Ownership is derived from that token; client-supplied owner IDs are ignored/not
+accepted. Mood must be one of the seven expression labels; title and artist are trimmed and limited to 200 characters.
+Artist remains nullable for existing entries, but YouTube matching requires it. Updating a title or artist clears the
+previous match.
+
+### YouTube account linking and playlists
+
+Configure the server-only `MOODIFY_YOUTUBE_CLIENT_ID`, `MOODIFY_YOUTUBE_CLIENT_SECRET`,
+`MOODIFY_YOUTUBE_REDIRECT_URI`, `MOODIFY_YOUTUBE_API_KEY`, and `MOODIFY_YOUTUBE_TOKEN_ENCRYPTION_KEY` values.
+Enable YouTube Data API v3 in Google Cloud and register the exact callback URI. Add local Google accounts as OAuth
+test users while the consent screen is in testing. Generate a Fernet key for the token encryption setting; losing or
+rotating it without re-encrypting stored records requires users to reconnect. Never expose these values via `VITE_*`
+variables or commit real secrets.
+
+- `POST /youtube/oauth/start` — authenticated; accepts `{}` or `{ "mood": "happy" }` and returns an authorization URL
+  for the Google account-linking flow, preserving the optional mood through the redirect.
+- `GET /youtube/oauth/callback` — receives the one-time OAuth state/code, checks the granted playlist-write scope,
+  stores the offline refresh token encrypted, and redirects back to Create Playlist. This links YouTube capabilities
+  to the current Moodify account; it is not Google sign-in.
+- `GET /youtube/connection` and `DELETE /youtube/connection` — inspect or disconnect/revoke the linked account.
+- `GET /youtube/songs/{song_id}/matches` — search by the saved title and artist. `PUT /youtube/songs/{song_id}/match`
+  with `{ "video_id": "..." }` confirms one of the current search results; the backend rechecks that selection.
+- `POST /youtube/playlists` with `{ "mood": "happy", "title": "Moodify — Happy" }` — creates a new private YouTube
+  playlist from every saved song in that mood after each has an artist and confirmed video match. Item insertion is
+  ordered by the saved song order. The response includes the YouTube URL and `created` or `partial` status.
+- `POST /youtube/playlists/{playlist_id}/retry` — retries only failed item insertions for this user's existing
+  playlist; it never creates a duplicate remote playlist.
+- `GET /youtube/playlists` (optional `?mood=happy`) — lists this Moodify user's previously created YouTube playlists.
+
+Google OAuth refresh tokens are encrypted at rest and are never returned to the client. The UI asks users to review
+candidate results before creation; search is not guaranteed to identify the intended recording. Search and write calls
+consume YouTube Data API quota. Playlists are private by default; each creation request creates a new playlist. A
+partial response means the remote playlist exists but one or more video insertions failed; `failed_song_ids` identifies
+the remaining songs to review. Tests mock Google endpoints and do not require live credentials. Public rollout must
+complete any applicable Google OAuth verification and comply with current YouTube API policies and quota limits.

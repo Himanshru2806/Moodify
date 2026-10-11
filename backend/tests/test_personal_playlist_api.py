@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -6,10 +7,10 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 import pytest
 
-from app.api.routes import auth as auth_routes
+from app.api.routes import auth as auth_routes, youtube as youtube_routes
 from app.core.database import Base, get_db
 from app.main import app
-from app.models import AdminAuditLog, AuthToken, PersonalSong, RefreshSession, User  # noqa: F401
+from app.models import AdminAuditLog, AuthToken, PersonalSong, RefreshSession, User, YouTubeConnection  # noqa: F401
 from app.core.config import settings
 from app.services.admin_bootstrap import promote_configured_superuser
 
@@ -98,6 +99,146 @@ def test_personal_playlist_requires_verified_auth_and_isolated_by_user(api_clien
     assert len(client.get("/api/v1/personal-playlists/songs?mood=happy", headers=first_headers).json()) == 1
 
 
+def test_youtube_match_review_and_playlist_creation_are_user_scoped(api_client, monkeypatch: pytest.MonkeyPatch) -> None:
+    client, sent = api_client
+    access = register_and_login(client, sent, "youtube-listener@example.com")
+    headers = {"Authorization": f"Bearer {access}"}
+    created_song = client.post(
+        "/api/v1/personal-playlists/songs",
+        headers=headers,
+        json={"mood": "happy", "title": "Yellow", "artist": "Coldplay"},
+    )
+    assert created_song.status_code == 201
+    song_id = created_song.json()["id"]
+    assert created_song.json()["artist"] == "Coldplay"
+
+    match = {
+        "video_id": "video-123",
+        "title": "Yellow (Official Video)",
+        "channel_title": "Coldplay",
+        "thumbnail_url": "https://example.test/thumb.jpg",
+    }
+    monkeypatch.setattr(youtube_routes, "search_videos", lambda title, artist: [match])
+    found = client.get(f"/api/v1/youtube/songs/{song_id}/matches", headers=headers)
+    assert found.status_code == 200
+    assert found.json() == [match]
+    rejected = client.put(
+        f"/api/v1/youtube/songs/{song_id}/match", headers=headers, json={"video_id": "not-a-result"}
+    )
+    assert rejected.status_code == 422
+    selected = client.put(
+        f"/api/v1/youtube/songs/{song_id}/match", headers=headers, json={"video_id": "video-123"}
+    )
+    assert selected.status_code == 200
+    assert selected.json()["youtube_video_id"] == "video-123"
+
+    from app.core.database import get_db
+
+    database = next(app.dependency_overrides[get_db]())
+    database.add(YouTubeConnection(
+        user_id=database.query(User).filter_by(email="youtube-listener@example.com").one().id,
+        google_subject="google-subject-1",
+        google_email="listener@gmail.com",
+        encrypted_refresh_token="encrypted-refresh-token",
+    ))
+    database.commit()
+    database.close()
+
+    monkeypatch.setattr(youtube_routes, "decrypt_refresh_token", lambda token: "refresh-token")
+    monkeypatch.setattr(youtube_routes, "refresh_access_token", lambda token: "access-token")
+    monkeypatch.setattr(youtube_routes, "create_remote_playlist", lambda token, title, description: "playlist-123")
+    monkeypatch.setattr(youtube_routes, "insert_remote_playlist_item", lambda token, playlist, video: "item-123")
+    playlist = client.post(
+        "/api/v1/youtube/playlists",
+        headers=headers,
+        json={"mood": "happy", "title": "Moodify — Happy"},
+    )
+    assert playlist.status_code == 201
+    assert playlist.json()["url"] == "https://www.youtube.com/playlist?list=playlist-123"
+    assert playlist.json()["added_count"] == 1
+    history = client.get("/api/v1/youtube/playlists?mood=happy", headers=headers)
+    assert history.status_code == 200
+    assert history.json()[0]["title"] == "Moodify — Happy"
+    assert history.json()[0]["status"] == "created"
+
+    sad_song = client.post(
+        "/api/v1/personal-playlists/songs",
+        headers=headers,
+        json={"mood": "sad", "title": "Fix You", "artist": "Coldplay"},
+    ).json()
+    assert client.put(
+        f"/api/v1/youtube/songs/{sad_song['id']}/match", headers=headers, json={"video_id": "video-123"}
+    ).status_code == 200
+    monkeypatch.setattr(youtube_routes, "create_remote_playlist", lambda token, title, description: "playlist-partial")
+    monkeypatch.setattr(youtube_routes, "insert_remote_playlist_item", lambda *args: (_ for _ in ()).throw(
+        youtube_routes.YouTubeProviderError("temporary provider error", 503)
+    ))
+    partial = client.post(
+        "/api/v1/youtube/playlists", headers=headers, json={"mood": "sad", "title": "Moodify — Sad"}
+    )
+    assert partial.status_code == 201
+    assert partial.json()["status"] == "partial"
+    assert partial.json()["failed_song_ids"] == [sad_song["id"]]
+    monkeypatch.setattr(youtube_routes, "insert_remote_playlist_item", lambda token, playlist, video: "retried-item")
+    retried = client.post(f"/api/v1/youtube/playlists/{partial.json()['id']}/retry", headers=headers)
+    assert retried.status_code == 200
+    assert retried.json()["status"] == "created"
+    assert retried.json()["added_count"] == 1
+
+    other_access = register_and_login(client, sent, "youtube-other@example.com")
+    assert client.get(f"/api/v1/youtube/songs/{song_id}/matches", headers={"Authorization": f"Bearer {other_access}"}).status_code == 404
+
+
+def test_youtube_oauth_state_is_single_use_user_bound_and_refresh_token_encrypted(api_client, monkeypatch: pytest.MonkeyPatch) -> None:
+    client, sent = api_client
+    access = register_and_login(client, sent, "oauth-listener@example.com")
+    headers = {"Authorization": f"Bearer {access}"}
+    from cryptography.fernet import Fernet
+
+    monkeypatch.setattr(settings, "youtube_client_id", "test-client-id")
+    monkeypatch.setattr(settings, "youtube_client_secret", "test-client-secret")
+    monkeypatch.setattr(settings, "youtube_redirect_uri", "http://localhost:8000/api/v1/youtube/oauth/callback")
+    monkeypatch.setattr(settings, "youtube_token_encryption_key", Fernet.generate_key().decode())
+
+    started = client.post("/api/v1/youtube/oauth/start", headers=headers, json={"mood": "happy"})
+    assert started.status_code == 200
+    state = parse_qs(urlparse(started.json()["authorization_url"]).query)["state"][0]
+    monkeypatch.setattr(youtube_routes, "exchange_authorization_code", lambda code: {
+        "access_token": "provider-access-token",
+        "refresh_token": "provider-refresh-token",
+    })
+    monkeypatch.setattr(youtube_routes, "fetch_google_identity", lambda token: {
+        "sub": "google-subject-123", "email": "listener@gmail.com",
+    })
+
+    callback = client.get(
+        "/api/v1/youtube/oauth/callback",
+        params={"code": "authorization-code", "state": state},
+        follow_redirects=False,
+    )
+    assert callback.status_code == 303
+    assert callback.headers["location"].endswith("/#create-playlist?mood=happy&youtube=connected")
+    connection_status = client.get("/api/v1/youtube/connection", headers=headers)
+    assert connection_status.json() == {"connected": True, "google_email": "listener@gmail.com", "remote_revoked": None}
+
+    from app.core.database import get_db
+
+    database = next(app.dependency_overrides[get_db]())
+    connection = database.query(YouTubeConnection).one()
+    assert connection.encrypted_refresh_token != "provider-refresh-token"
+    from app.services.youtube import decrypt_refresh_token
+
+    assert decrypt_refresh_token(connection.encrypted_refresh_token) == "provider-refresh-token"
+    database.close()
+
+    replay = client.get(
+        "/api/v1/youtube/oauth/callback",
+        params={"code": "second-code", "state": state},
+        follow_redirects=False,
+    )
+    assert "youtube=invalid-state" in replay.headers["location"]
+
+
 def test_personal_song_validation_and_one_time_email_tokens(api_client) -> None:
     client, sent = api_client
     access = register_and_login(client, sent, "listener@example.com")
@@ -126,6 +267,27 @@ def test_personal_song_validation_and_one_time_email_tokens(api_client) -> None:
     assert client.post(
         "/api/v1/auth/login", json={"email": "listener@example.com", "password": "even-better-password-2026"}
     ).status_code == 200
+
+
+def test_legacy_title_only_song_can_be_updated_with_artist(api_client) -> None:
+    client, sent = api_client
+    access = register_and_login(client, sent, "legacy-song@example.com")
+    headers = {"Authorization": f"Bearer {access}"}
+    legacy = client.post(
+        "/api/v1/personal-playlists/songs",
+        headers=headers,
+        json={"mood": "happy", "title": "Yellow"},
+    )
+    assert legacy.status_code == 201
+    assert legacy.json()["artist"] is None
+
+    updated = client.put(
+        f"/api/v1/personal-playlists/songs/{legacy.json()['id']}",
+        headers=headers,
+        json={"title": "Yellow", "artist": "Coldplay"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["artist"] == "Coldplay"
 
 
 def test_profile_validation_and_update_are_user_scoped(api_client) -> None:

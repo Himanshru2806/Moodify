@@ -92,8 +92,23 @@ a shared browser profile. Individual/all saved photos can be deleted in the UI. 
 implemented.
 
 Personal mood playlists require a verified Moodify email/password account and are stored per user in PostgreSQL so
-they can sync across devices. Use **Create playlist** to add song titles under a mood; each title opens a YouTube
-search and is not guaranteed to identify an exact recording. Songs are user-managed and can be removed in the UI.
+they can sync across devices. Use **Create playlist** to save title+artist entries by mood, review YouTube search
+matches, and create a private YouTube playlist containing the confirmed videos. Link a Google account from Create
+Playlist when prompted. The user-managed song list and the external YouTube playlist are separate records; each explicit
+creation makes a new playlist, and created playlist links remain visible in Moodify. Existing title-only songs need an
+artist and a newly confirmed video match before playlist creation. YouTube OAuth refresh tokens are encrypted in the
+backend database and never sent to the frontend.
+
+To enable the YouTube integration, configure backend-only `MOODIFY_YOUTUBE_CLIENT_ID`,
+`MOODIFY_YOUTUBE_CLIENT_SECRET`, `MOODIFY_YOUTUBE_REDIRECT_URI`, `MOODIFY_YOUTUBE_API_KEY`, and
+`MOODIFY_YOUTUBE_TOKEN_ENCRYPTION_KEY` values in the backend environment. Enable YouTube Data API v3 in Google Cloud,
+configure the OAuth consent screen and exact redirect URI (for local development, the example callback is
+`http://localhost:8000/api/v1/youtube/oauth/callback`), and add test accounts while the consent screen is in testing.
+Generate the encryption key using the command in `.env.example`; protect it like a database credential and retain it
+across restarts. Search and playlist writes consume Google API quota, and public rollout may require OAuth app
+verification. The match is user-confirmed because YouTube search can return covers, live versions, or incorrect tracks.
+See [docs/api.md](docs/api.md) for API details and security behavior.
+
 Account verification links expire after 24 hours, password-reset links after 30 minutes, and passwords require at least
 12 characters. Local links can be inspected through Mailpit; production requires a real SMTP configuration. Account
 deletion and self-service email changes are not yet available; contact the service operator for account/data removal.
@@ -118,7 +133,11 @@ Frontend URL: `http://localhost:5173`
 - `GET /api/v1/tracks`
 - `POST /api/v1/auth/register`, `/login`, `/refresh`, `/logout`, `/verify`, `/forgot-password`, `/reset-password`
 - `GET|POST /api/v1/personal-playlists/songs` (Bearer access token; optional `?mood=` filter)
+- `PUT /api/v1/personal-playlists/songs/{song_id}` (Bearer access token)
 - `DELETE /api/v1/personal-playlists/songs/{song_id}` (Bearer access token)
+- `POST /api/v1/youtube/oauth/start`, `GET /api/v1/youtube/oauth/callback`, `GET|DELETE /api/v1/youtube/connection`
+- `GET /api/v1/youtube/songs/{song_id}/matches`, `PUT /api/v1/youtube/songs/{song_id}/match`
+- `GET|POST /api/v1/youtube/playlists`, `POST /api/v1/youtube/playlists/{playlist_id}/retry` (Bearer access token)
 
 ## Next Milestones
 
