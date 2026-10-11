@@ -11,7 +11,7 @@ services:
       POSTGRES_USER: moodify
       POSTGRES_PASSWORD: moodify
     ports:
-      - "5432:5432"
+      - "${MOODIFY_DB_HOST_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 

@@ -25,8 +25,10 @@ data/      Future catalogue data and local-only datasets
 Start the local PostgreSQL database and Mailpit email catcher in a separate terminal:
 
 ```bash
-docker compose up -d db mailpit
+docker compose --env-file .env.compose up -d db mailpit
 ```
+
+Copy `.env.compose.example` to `.env.compose` first. The database is published on host port `5432` by default. If that port is already in use, set `MOODIFY_DB_HOST_PORT=5433` in `.env.compose` and set `MOODIFY_DATABASE_URL` in `backend/.env` to use port `5433` too.
 
 Mailpit captures local account verification and password recovery messages at `http://localhost:8025`.
 
