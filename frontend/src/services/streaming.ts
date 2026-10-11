@@ -5,3 +5,8 @@ export function getYouTubePlaylistSearchUrl(searchQuery: string): string {
   });
   return `https://www.youtube.com/results?${query.toString()}`;
 }
+
+export function getYouTubeSongSearchUrl(title: string): string {
+  const query = new URLSearchParams({ search_query: title });
+  return `https://www.youtube.com/results?${query.toString()}`;
+}

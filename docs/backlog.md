@@ -7,6 +7,8 @@
 - [x] Add first recommendation baseline.
 - [ ] Add database models and migrations.
 - [ ] Add structured logging without image content.
+- [x] Add database-backed user/admin/super-user roles and protected admin operations.
+- [x] Add owner bootstrap, audit records, account moderation, aggregate metrics, catalogue management and allowlisted scoring settings.
 
 ## Expression Recognition
 

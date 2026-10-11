@@ -1,10 +1,16 @@
 from io import BytesIO
+from collections.abc import Generator
 
 from fastapi.testclient import TestClient
 import pytest
 from PIL import Image
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
+from app.core.database import Base, get_db
 from app.main import app
+from app.models import AdminAuditLog, AuthToken, CatalogueTrack, PersonalSong, ProductSetting, RefreshSession, User  # noqa: F401
 from app.services import expression_service
 from app.services.expression_model import (
     ExpressionModel,
@@ -14,6 +20,26 @@ from app.services.expression_model import (
 
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def isolated_database(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    test_session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    Base.metadata.create_all(engine)
+
+    def override_get_db() -> Generator[Session, None, None]:
+        database = test_session()
+        try:
+            yield database
+        finally:
+            database.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    yield
+    app.dependency_overrides.clear()
+    Base.metadata.drop_all(engine)
+    engine.dispose()
 
 
 def test_health_check() -> None:

@@ -1,3 +1,7 @@
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import CatalogueTrack
 from app.schemas.tracks import Track
 
 
@@ -58,3 +62,10 @@ TRACKS: list[Track] = [
         source_url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
     ),
 ]
+
+
+def load_tracks(database: Session) -> list[Track]:
+    records = database.scalars(select(CatalogueTrack).order_by(CatalogueTrack.id)).all()
+    if not records:
+        return TRACKS
+    return [Track.model_validate(record, from_attributes=True) for record in records]

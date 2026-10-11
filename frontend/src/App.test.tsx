@@ -5,6 +5,14 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
+import {
+  getAdminAudit,
+  getAdminMetrics,
+  getAdminOperationalStatus,
+  getRecommendationWeights,
+  listAdminCatalogue,
+  listAdminUsers,
+} from './services/admin';
 import { getHealth, getRecommendations, predictExpression } from './services/api';
 import {
   clearPersonalDataset,
@@ -15,11 +23,37 @@ import {
 } from './services/personalDataset';
 import type { ExpressionPrediction } from './types';
 import type { PersonalDatasetContribution } from './services/personalDataset';
+import {
+  createPersonalSong,
+  listPersonalSongs,
+  loginAccount,
+  logoutAccount,
+  registerAccount,
+  refreshSession,
+  updateAccountProfile,
+} from './services/personalPlaylists';
+import type { PersonalSong } from './services/personalPlaylists';
 
 vi.mock('./services/api', () => ({
   getHealth: vi.fn(),
   getRecommendations: vi.fn(),
   predictExpression: vi.fn(),
+}));
+
+vi.mock('./services/admin', () => ({
+  createCatalogueTrack: vi.fn(),
+  deleteCatalogueTrack: vi.fn(),
+  deleteManagedUser: vi.fn(),
+  getAdminAudit: vi.fn(),
+  getAdminMetrics: vi.fn(),
+  getAdminOperationalStatus: vi.fn(),
+  getRecommendationWeights: vi.fn(),
+  listAdminCatalogue: vi.fn(),
+  listAdminUsers: vi.fn(),
+  saveRecommendationWeights: vi.fn(),
+  setUserRole: vi.fn(),
+  setUserSuspension: vi.fn(),
+  updateCatalogueTrack: vi.fn(),
 }));
 
 vi.mock('./services/personalDataset', () => ({
@@ -28,6 +62,20 @@ vi.mock('./services/personalDataset', () => ({
   deletePersonalDatasetContribution: vi.fn(),
   listPersonalDatasetContributions: vi.fn(),
   savePersonalDatasetContribution: vi.fn(),
+}));
+
+vi.mock('./services/personalPlaylists', () => ({
+  createPersonalSong: vi.fn(),
+  deletePersonalSong: vi.fn(),
+  listPersonalSongs: vi.fn(),
+  loginAccount: vi.fn(),
+  logoutAccount: vi.fn(),
+  refreshSession: vi.fn(),
+  registerAccount: vi.fn(),
+  requestPasswordReset: vi.fn(),
+  resetPassword: vi.fn(),
+  updateAccountProfile: vi.fn(),
+  verifyAccount: vi.fn(),
 }));
 
 const prediction: ExpressionPrediction = {
@@ -56,6 +104,19 @@ describe('mood playlist choices', () => {
     vi.mocked(predictExpression).mockResolvedValue(prediction);
     vi.mocked(createContributionId).mockReturnValue('photo-test-id');
     vi.mocked(listPersonalDatasetContributions).mockResolvedValue([]);
+    vi.mocked(refreshSession).mockRejectedValue(new Error('No active session'));
+    vi.mocked(listPersonalSongs).mockResolvedValue([]);
+    vi.mocked(listAdminUsers).mockResolvedValue([]);
+    vi.mocked(getAdminMetrics).mockResolvedValue({ users_total: 0, users_verified: 0, users_suspended: 0, songs_total: 0 });
+    vi.mocked(getAdminOperationalStatus).mockResolvedValue({ status: 'ok', environment: 'test', api_version: '0.1.0', database: 'ok' });
+    vi.mocked(listAdminCatalogue).mockResolvedValue([]);
+    vi.mocked(getRecommendationWeights).mockResolvedValue({ goal_tag_weight: 2, language_match_weight: 1, genre_match_weight: 1, expression_affinity_weight: 0.5, energy_weight: 1 });
+    vi.mocked(getAdminAudit).mockResolvedValue([]);
+    vi.mocked(loginAccount).mockResolvedValue({ email: 'listener@example.com', display_name: 'Listener', username: 'listener', access_token: 'test-access', token_type: 'bearer' });
+    vi.mocked(registerAccount).mockResolvedValue({ message: 'Check your email for a verification link.' });
+    vi.mocked(createPersonalSong).mockResolvedValue({
+      id: 'song-new', mood: 'happy', title: 'Here Comes the Sun', position: 1, created_at: '2026-10-11T00:00:00Z',
+    });
     vi.mocked(savePersonalDatasetContribution).mockResolvedValue('photo-test-id');
     vi.mocked(deletePersonalDatasetContribution).mockResolvedValue(undefined);
   });
@@ -171,6 +232,144 @@ describe('mood playlist choices', () => {
     expect(url.searchParams.get('sp')).toBe('EgIQAw%3D%3D');
     expect(link.getAttribute('target')).toBe('_blank');
     expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('gates the personal playlist creator behind sign-in and preserves the chosen mood', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.upload(screen.getByLabelText('Upload image'), new File(['photo'], 'portrait.jpg', { type: 'image/jpeg' }));
+    await screen.findByText(/Detected expression: happy/);
+    await user.click(screen.getByRole('link', { name: 'Create playlist' }));
+
+    expect(await screen.findByRole('heading', { name: 'Create your playlist' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Sign in or create an account' }).getAttribute('href')).toContain('mood=happy');
+    await user.click(screen.getByRole('link', { name: 'Sign in or create an account' }));
+    await screen.findByRole('heading', { name: 'Welcome back' });
+    await user.type(screen.getByLabelText('Email'), 'listener@example.com');
+    await user.type(screen.getByLabelText(/Password/), 'a-long-enough-test-password');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    await screen.findByRole('heading', { name: 'Create your playlist' });
+    expect((screen.getByLabelText('Mood') as HTMLSelectElement).value).toBe('happy');
+    expect(loginAccount).toHaveBeenCalled();
+  });
+
+  it('lands on Discover after signing in directly from the account page', async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, '', `${window.location.pathname}#account`);
+    render(<App />);
+
+    await screen.findByRole('heading', { name: 'Welcome back' });
+    await user.type(screen.getByLabelText('Email'), 'listener@example.com');
+    await user.type(screen.getByLabelText(/Password/), 'a-long-enough-test-password');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    expect(await screen.findByRole('heading', { name: 'Find your next mood.' })).toBeTruthy();
+    expect(window.location.hash).toBe('#home');
+    expect(loginAccount).toHaveBeenCalledWith('listener@example.com', 'a-long-enough-test-password');
+  });
+
+  it('gates admin tools by role and loads the super-user console', async () => {
+    vi.mocked(refreshSession).mockResolvedValue({
+      email: 'owner@example.com', display_name: 'Owner', username: 'owner', access_token: 'owner-token', token_type: 'bearer', role: 'super_user',
+    });
+    window.history.replaceState(null, '', `${window.location.pathname}#admin`);
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Moodify administration' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Recommendation catalogue' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Recommendation settings' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Recent admin actions' })).toBeTruthy();
+    expect(getAdminMetrics).toHaveBeenCalledWith('owner-token');
+
+    cleanup();
+    vi.mocked(refreshSession).mockResolvedValue({
+      email: 'listener@example.com', display_name: 'Listener', username: 'listener', access_token: 'user-token', token_type: 'bearer', role: 'user',
+    });
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Admin access required' })).toBeTruthy();
+    expect(getAdminMetrics).toHaveBeenCalledTimes(1);
+  });
+
+  it('collects a display name and username at signup and supports password visibility', async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, '', `${window.location.pathname}#account`);
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'New to Moodify? Create an account' }));
+    await user.type(screen.getByLabelText('Email'), 'listener@example.com');
+    await user.type(screen.getByLabelText('Display name'), 'Mood Listener');
+    await user.type(screen.getByLabelText(/^Username/), 'mood_listener');
+    const password = screen.getByLabelText(/^Password/) as HTMLInputElement;
+    expect(password.type).toBe('password');
+    await user.type(password, 'a-long-enough-test-password');
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(password.type).toBe('text');
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+
+    expect(registerAccount).toHaveBeenCalledWith('listener@example.com', 'a-long-enough-test-password', 'Mood Listener', 'mood_listener');
+  });
+
+  it('offers sign out in the header and renders editable account profile information', async () => {
+    const user = userEvent.setup();
+    vi.mocked(refreshSession).mockResolvedValue({
+      email: 'listener@example.com', display_name: 'Listener', username: 'listener', access_token: 'test-access', token_type: 'bearer',
+    });
+    vi.mocked(updateAccountProfile).mockResolvedValue({ email: 'listener@example.com', display_name: 'Mood Listener', username: 'mood_listener' });
+    window.history.replaceState(null, '', `${window.location.pathname}#account`);
+    render(<App />);
+
+    expect(await screen.findByText('@listener')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Edit profile' }));
+    await user.clear(screen.getByLabelText('Display name'));
+    await user.type(screen.getByLabelText('Display name'), 'Mood Listener');
+    await user.clear(screen.getByLabelText(/^Username/));
+    await user.type(screen.getByLabelText(/^Username/), 'mood_listener');
+    await user.click(screen.getByRole('button', { name: 'Save profile' }));
+
+    expect(updateAccountProfile).toHaveBeenCalledWith('test-access', 'Mood Listener', 'mood_listener');
+    expect(await screen.findByText('@mood_listener')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(logoutAccount).toHaveBeenCalled();
+    expect(await screen.findByRole('link', { name: 'Sign in' })).toBeTruthy();
+  });
+
+  it('allows showing and hiding the password on the reset page', async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, '', `${window.location.pathname}#reset-password?token=valid-reset-token`);
+    render(<App />);
+
+    const password = screen.getByLabelText(/^New password/) as HTMLInputElement;
+    expect(password.type).toBe('password');
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(password.type).toBe('text');
+    await user.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(password.type).toBe('password');
+  });
+
+  it('puts saved personal songs before built-in ideas and adds a title to the selected mood', async () => {
+    const user = userEvent.setup();
+    const song: PersonalSong = { id: 'song-1', mood: 'happy', title: 'Yellow', position: 1, created_at: '2026-10-11T00:00:00Z' };
+    vi.mocked(refreshSession).mockResolvedValue({ email: 'listener@example.com', display_name: 'Listener', username: 'listener', access_token: 'test-access', token_type: 'bearer' });
+    vi.mocked(listPersonalSongs).mockResolvedValue([song]);
+    window.history.replaceState(null, '', `${window.location.pathname}#playlists?mood=happy`);
+
+    render(<App />);
+
+    const personalLink = await screen.findByRole('link', { name: /Yellow/ });
+    const partyLink = screen.getByRole('link', { name: /Party & dance/ });
+    expect(personalLink.compareDocumentPosition(partyLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(personalLink.getAttribute('href')).toContain('search_query=Yellow');
+
+    await user.click(screen.getByRole('link', { name: /Add your own songs/ }));
+    await screen.findByRole('heading', { name: 'Create your playlist' });
+    expect((screen.getByLabelText('Mood') as HTMLSelectElement).value).toBe('happy');
+    await user.type(screen.getByLabelText('Song title'), 'Here Comes the Sun');
+    await user.click(screen.getByRole('button', { name: 'Add song' }));
+    expect(await screen.findByRole('link', { name: /Here Comes the Sun/ })).toBeTruthy();
+    expect(createPersonalSong).toHaveBeenCalledWith('test-access', 'happy', 'Here Comes the Sun');
   });
 
   it('shows the expression correction after a prediction is available', async () => {

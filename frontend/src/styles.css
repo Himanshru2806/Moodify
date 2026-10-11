@@ -1,3 +1,155 @@
+/* Admin console */
+.admin-page .admin-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.admin-metrics article {
+  display: grid;
+  gap: 0.45rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid rgba(28, 54, 73, 0.12);
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.admin-metrics article span,
+.admin-user-table td small {
+  color: #5c6a75;
+  font-size: 0.86rem;
+}
+
+.admin-metrics article strong {
+  color: #183b4e;
+  font-size: 1.8rem;
+}
+
+.admin-toolbar,
+.admin-search {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.admin-search input {
+  min-width: min(18rem, 50vw);
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.admin-user-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.admin-user-table th,
+.admin-user-table td {
+  padding: 0.85rem 0.65rem;
+  border-bottom: 1px solid rgba(28, 54, 73, 0.1);
+  vertical-align: middle;
+}
+
+.admin-user-table td:first-child strong,
+.admin-user-table td:first-child small {
+  display: block;
+}
+
+.admin-user-table td select {
+  max-width: 9rem;
+}
+
+.admin-row-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.admin-note {
+  color: #5c6a75;
+  font-size: 0.9rem;
+}
+
+.admin-status-panel,
+.admin-catalogue-panel,
+.admin-settings-panel,
+.admin-audit-panel {
+  margin-top: 1.25rem;
+}
+
+.admin-status-panel small {
+  color: #5c6a75;
+}
+
+.admin-catalogue-form,
+.admin-weights-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  align-items: end;
+  gap: 0.85rem;
+  margin: 1rem 0;
+}
+
+.admin-catalogue-form label,
+.admin-weights-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: #344b59;
+  font-size: 0.9rem;
+}
+
+.admin-catalogue-form input,
+.admin-weights-form input {
+  width: 100%;
+}
+
+.admin-form-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.admin-audit-panel ul {
+  display: grid;
+  gap: 0.65rem;
+  padding-left: 1.25rem;
+  color: #536570;
+}
+
+.admin-audit-panel li strong {
+  color: #183b4e;
+  text-transform: capitalize;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .admin-toolbar,
+  .admin-search {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-search input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .admin-row-actions {
+    flex-direction: column;
+  }
+}
 :root {
   color: #172018;
   background: #eef4e8;
@@ -100,6 +252,17 @@ button:disabled {
   background: #e7f2dc;
 }
 
+.header-signout {
+  border: 1px solid #c9d8bf;
+  border-radius: 999px;
+  padding: 0.6rem 0.85rem;
+  color: #25462b;
+  background: transparent;
+  font-size: 0.92rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
 .header-cta {
   flex: 0 0 auto;
   border-radius: 999px;
@@ -113,6 +276,7 @@ button:disabled {
 
 .brand-link:focus-visible,
 .primary-nav a:focus-visible,
+.header-signout:focus-visible,
 .header-cta:focus-visible,
 button:focus-visible {
   outline: 3px solid #76936b;
@@ -590,6 +754,148 @@ select {
   background: #fffef8;
 }
 
+.personal-playlist-panel {
+  display: grid;
+  gap: 20px;
+  background: #fffef8;
+}
+
+.personal-song-form,
+.account-form {
+  display: grid;
+  gap: 16px;
+}
+
+.password-input-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-form .password-visibility-toggle {
+  justify-self: stretch;
+  border: 1px solid #c9d8bf;
+  color: #25462b;
+  background: #f4f8ef;
+}
+
+.profile-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.account-username {
+  color: #63705e;
+  font-size: 0.8em;
+  font-weight: 600;
+}
+
+.personal-song-form button,
+.account-form button,
+.personal-playlist-panel > button {
+  justify-self: start;
+}
+
+.personal-song-form small,
+.account-form small {
+  color: #63705e;
+  font-weight: 500;
+}
+
+.personal-songs-heading {
+  margin: 0;
+}
+
+.personal-songs-heading h2 {
+  margin-bottom: 6px;
+}
+
+.personal-songs-heading p {
+  margin-bottom: 0;
+  color: #63705e;
+}
+
+.personal-song-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.personal-song-list li,
+.personal-choice-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #e1ebd9;
+  border-radius: 18px;
+  padding: 12px 14px;
+  background: #f2f8ec;
+}
+
+.personal-song-list li > a {
+  display: grid;
+  gap: 5px;
+  color: #172018;
+  text-decoration: none;
+}
+
+.personal-song-list li > a:focus-visible {
+  outline: 3px solid #76936b;
+  outline-offset: 3px;
+}
+
+.personal-song-list small {
+  color: #63705e;
+}
+
+.song-delete-button {
+  flex: 0 0 auto;
+  border: 1px solid #c9d8bf;
+  border-radius: 999px;
+  padding: 0.55rem 0.85rem;
+  color: #315b37;
+  background: #fbfff6;
+  font-weight: 800;
+}
+
+.account-mode-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+}
+
+.text-button {
+  border: 0;
+  padding: 0;
+  color: #315b37;
+  background: transparent;
+  font-weight: 800;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.personal-choice-row {
+  align-items: stretch;
+  padding: 0;
+}
+
+.personal-choice-row .playlist-choice {
+  flex: 1 1 auto;
+  border: 0;
+  background: transparent;
+}
+
+.personal-choice-row .song-delete-button {
+  align-self: center;
+  margin-right: 12px;
+}
+
 .personal-dataset-panel .results-heading p:last-child {
   max-width: 780px;
   margin-bottom: 0;
@@ -804,6 +1110,12 @@ select {
   outline-offset: 3px;
 }
 
+.song-delete-button:focus-visible,
+.text-button:focus-visible {
+  outline: 3px solid #76936b;
+  outline-offset: 3px;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     width: min(100% - 28px, 560px);
@@ -831,6 +1143,11 @@ select {
   .primary-nav a {
     padding: 0.6rem 0.8rem;
     white-space: nowrap;
+  }
+
+  .header-signout {
+    order: 5;
+    margin-left: auto;
   }
 
   .status-pill {

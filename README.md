@@ -22,14 +22,48 @@ data/      Future catalogue data and local-only datasets
 
 ## Backend Setup
 
+Start the local PostgreSQL database and Mailpit email catcher in a separate terminal:
+
+```bash
+docker compose up -d db mailpit
+```
+
+Mailpit captures local account verification and password recovery messages at `http://localhost:8025`.
+
 ```bash
 cd backend
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+alembic upgrade head
 python -m app.services.model_download
 uvicorn app.main:app --reload
 ```
+
+The local defaults configure PostgreSQL at `localhost:5432`, Mailpit SMTP at `localhost:1025`, and the frontend at
+`http://localhost:5173`. Configure `MOODIFY_DATABASE_URL`, `MOODIFY_ENVIRONMENT`, `MOODIFY_JWT_SECRET`, `MOODIFY_CORS_ORIGINS`, `MOODIFY_FRONTEND_URL`,
+`MOODIFY_COOKIE_SECURE`, `MOODIFY_SMTP_HOST`, `MOODIFY_SMTP_PORT`, `MOODIFY_SMTP_USERNAME`,
+`MOODIFY_SMTP_PASSWORD`, `MOODIFY_SMTP_FROM_EMAIL`, and `MOODIFY_SMTP_STARTTLS` for other environments. Replace
+the development JWT secret, use HTTPS with secure cookies, protect database and SMTP credentials, and provide a
+production SMTP service before deployment. Set `MOODIFY_ENVIRONMENT=production` with a unique `MOODIFY_JWT_SECRET`;
+the API refuses to start in production with the development fallback secret or non-secure cookies. Set CORS origins to
+the exact deployed frontend origin. Public deployments should apply rate limits to account and email endpoints.
+
+### Product-owner and admin access
+
+Moodify has `user`, `admin`, and `super_user` roles. Register and verify the intended owner account through the normal
+account flow first. Then set `MOODIFY_INITIAL_SUPERUSER_EMAIL` to that verified email in the backend environment and
+restart the API. Startup promotes that existing account to `super_user`; it does not create an account or set a
+password. Remove the setting after confirming access—the role remains stored in PostgreSQL. Startup fails clearly if
+the configured account is missing or unverified. There are no default admin credentials.
+
+Sign in with that account and use the **Admin** navigation link. Admins can search accounts, suspend/restore ordinary
+users, permanently delete ordinary accounts and view aggregate metrics. Super users can additionally assign roles,
+manage the recommendation catalogue, review audit events and change bounded recommendation scoring weights. Deletion
+also removes that account's personal songs and authentication sessions. The status panel reports only API/database
+health, environment and version; database, SMTP and signing secrets remain deployment-managed and are never exposed
+or editable in the admin UI. Configure HTTPS, protect the owner account and secrets, and apply deployment-level rate
+limits before public production use.
 
 The first model download is about 343 MB and is cached under `backend/models/` (ignored by Git). It fetches revision
 `ef0bc6fc34241b6587e7e009e7711357be28c024` of the [trpakov/vit-face-expression checkpoint](https://huggingface.co/trpakov/vit-face-expression);
@@ -57,6 +91,13 @@ used to train a personal model. Browser storage is not encrypted and is not acco
 a shared browser profile. Individual/all saved photos can be deleted in the UI. Live camera analysis is not yet
 implemented.
 
+Personal mood playlists require a verified Moodify email/password account and are stored per user in PostgreSQL so
+they can sync across devices. Use **Create playlist** to add song titles under a mood; each title opens a YouTube
+search and is not guaranteed to identify an exact recording. Songs are user-managed and can be removed in the UI.
+Account verification links expire after 24 hours, password-reset links after 30 minutes, and passwords require at least
+12 characters. Local links can be inspected through Mailpit; production requires a real SMTP configuration. Account
+deletion and self-service email changes are not yet available; contact the service operator for account/data removal.
+
 API docs: `http://localhost:8000/docs`
 
 ## Frontend Setup
@@ -75,6 +116,9 @@ Frontend URL: `http://localhost:5173`
 - `POST /api/v1/expressions/predict`
 - `POST /api/v1/recommendations`
 - `GET /api/v1/tracks`
+- `POST /api/v1/auth/register`, `/login`, `/refresh`, `/logout`, `/verify`, `/forgot-password`, `/reset-password`
+- `GET|POST /api/v1/personal-playlists/songs` (Bearer access token; optional `?mood=` filter)
+- `DELETE /api/v1/personal-playlists/songs/{song_id}` (Bearer access token)
 
 ## Next Milestones
 
