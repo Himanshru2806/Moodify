@@ -1,6 +1,6 @@
 import type { ExpressionLabel } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
 export interface SessionUser {
   email: string;
@@ -57,6 +57,19 @@ interface MessageResponse {
   message: string;
 }
 
+async function fetchApi(path: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`${API_BASE_URL}${path}`, init);
+  } catch (error: unknown) {
+    if (error instanceof TypeError) {
+      throw new Error(
+        `Could not reach Moodify API at ${API_BASE_URL}. Check that the backend is running and VITE_API_BASE_URL points to the correct API.`,
+      );
+    }
+    throw error;
+  }
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: unknown } | null;
@@ -67,7 +80,7 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 async function post<T>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchApi(path, {
     method: 'POST',
     credentials: 'include',
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
@@ -97,7 +110,7 @@ export function updateAccountProfile(
   displayName: string,
   username: string,
 ): Promise<UserProfile> {
-  return fetch(`${API_BASE_URL}/auth/me`, {
+  return fetchApi('/auth/me', {
     method: 'PUT',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
@@ -119,7 +132,7 @@ export function resetPassword(token: string, password: string): Promise<MessageR
 
 export async function listPersonalSongs(accessToken: string, mood?: ExpressionLabel): Promise<PersonalSong[]> {
   const query = mood ? `?mood=${encodeURIComponent(mood)}` : '';
-  const response = await fetch(`${API_BASE_URL}/personal-playlists/songs${query}`, {
+  const response = await fetchApi(`/personal-playlists/songs${query}`, {
     credentials: 'include',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -132,7 +145,7 @@ export async function createPersonalSong(
   title: string,
   artist?: string,
 ): Promise<PersonalSong> {
-  const response = await fetch(`${API_BASE_URL}/personal-playlists/songs`, {
+  const response = await fetchApi('/personal-playlists/songs', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
@@ -147,7 +160,7 @@ export async function updatePersonalSong(
   title: string,
   artist: string,
 ): Promise<PersonalSong> {
-  const response = await fetch(`${API_BASE_URL}/personal-playlists/songs/${encodeURIComponent(id)}`, {
+  const response = await fetchApi(`/personal-playlists/songs/${encodeURIComponent(id)}`, {
     method: 'PUT',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
@@ -157,7 +170,7 @@ export async function updatePersonalSong(
 }
 
 export async function getYouTubeConnection(accessToken: string): Promise<YouTubeConnectionStatus> {
-  const response = await fetch(`${API_BASE_URL}/youtube/connection`, {
+  const response = await fetchApi('/youtube/connection', {
     credentials: 'include',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -165,7 +178,7 @@ export async function getYouTubeConnection(accessToken: string): Promise<YouTube
 }
 
 export async function startYouTubeAuthorization(accessToken: string, mood?: ExpressionLabel): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/youtube/oauth/start`, {
+  const response = await fetchApi('/youtube/oauth/start', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
@@ -176,7 +189,7 @@ export async function startYouTubeAuthorization(accessToken: string, mood?: Expr
 }
 
 export async function disconnectYouTube(accessToken: string): Promise<YouTubeConnectionStatus> {
-  const response = await fetch(`${API_BASE_URL}/youtube/connection`, {
+  const response = await fetchApi('/youtube/connection', {
     method: 'DELETE',
     credentials: 'include',
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -185,7 +198,7 @@ export async function disconnectYouTube(accessToken: string): Promise<YouTubeCon
 }
 
 export async function findYouTubeMatches(accessToken: string, songId: string): Promise<YouTubeMatch[]> {
-  const response = await fetch(`${API_BASE_URL}/youtube/songs/${encodeURIComponent(songId)}/matches`, {
+  const response = await fetchApi(`/youtube/songs/${encodeURIComponent(songId)}/matches`, {
     credentials: 'include',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -197,7 +210,7 @@ export async function selectYouTubeMatch(
   songId: string,
   videoId: string,
 ): Promise<PersonalSong> {
-  const response = await fetch(`${API_BASE_URL}/youtube/songs/${encodeURIComponent(songId)}/match`, {
+  const response = await fetchApi(`/youtube/songs/${encodeURIComponent(songId)}/match`, {
     method: 'PUT',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
@@ -211,7 +224,7 @@ export async function createYouTubePlaylist(
   mood: ExpressionLabel,
   title: string,
 ): Promise<CreatedYouTubePlaylist> {
-  const response = await fetch(`${API_BASE_URL}/youtube/playlists`, {
+  const response = await fetchApi('/youtube/playlists', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
@@ -222,7 +235,7 @@ export async function createYouTubePlaylist(
 
 export async function listYouTubePlaylists(accessToken: string, mood?: ExpressionLabel): Promise<CreatedYouTubePlaylist[]> {
   const query = mood ? `?mood=${encodeURIComponent(mood)}` : '';
-  const response = await fetch(`${API_BASE_URL}/youtube/playlists${query}`, {
+  const response = await fetchApi(`/youtube/playlists${query}`, {
     credentials: 'include',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -230,7 +243,7 @@ export async function listYouTubePlaylists(accessToken: string, mood?: Expressio
 }
 
 export async function retryYouTubePlaylist(accessToken: string, playlistId: string): Promise<CreatedYouTubePlaylist> {
-  const response = await fetch(`${API_BASE_URL}/youtube/playlists/${encodeURIComponent(playlistId)}/retry`, {
+  const response = await fetchApi(`/youtube/playlists/${encodeURIComponent(playlistId)}/retry`, {
     method: 'POST',
     credentials: 'include',
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -239,7 +252,7 @@ export async function retryYouTubePlaylist(accessToken: string, playlistId: stri
 }
 
 export async function deletePersonalSong(accessToken: string, id: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/personal-playlists/songs/${encodeURIComponent(id)}`, {
+  const response = await fetchApi(`/personal-playlists/songs/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: { Authorization: `Bearer ${accessToken}` },

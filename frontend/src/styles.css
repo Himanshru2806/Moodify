@@ -882,8 +882,7 @@ select {
   font-weight: 800;
 }
 
-.youtube-match-channel,
-.youtube-playlist-builder small {
+.youtube-match-channel {
   color: #63705e;
 }
 
@@ -923,68 +922,6 @@ select {
 .youtube-match-list small {
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.youtube-playlist-builder {
-  display: grid;
-  gap: 14px;
-  margin-top: 24px;
-  border-top: 1px solid #e1ebd9;
-  padding-top: 20px;
-}
-
-.youtube-playlist-builder .results-heading h2 {
-  margin-bottom: 6px;
-}
-
-.youtube-playlist-builder .results-heading p {
-  color: #63705e;
-}
-
-.youtube-playlist-builder > label {
-  display: grid;
-  gap: 8px;
-  font-weight: 800;
-}
-
-.youtube-connection-status {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-radius: 14px;
-  padding: 12px 14px;
-  color: #315b37;
-  background: #f2f8ec;
-  font-weight: 800;
-}
-
-.youtube-playlist-history ul {
-  display: grid;
-  gap: 8px;
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.youtube-playlist-history li {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 8px 14px;
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: #f2f8ec;
-}
-
-.youtube-playlist-history a {
-  color: #315b37;
-  font-weight: 800;
-}
-
-.youtube-playlist-history span {
-  color: #63705e;
 }
 
 @media (max-width: 560px) {

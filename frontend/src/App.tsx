@@ -28,12 +28,8 @@ import { getPlaylistChoices } from './services/playlistOptions';
 import { getYouTubePlaylistSearchUrl, getYouTubeSongSearchUrl, getYouTubeVideoUrl } from './services/streaming';
 import {
   createPersonalSong,
-  createYouTubePlaylist,
   deletePersonalSong,
-  disconnectYouTube,
   findYouTubeMatches,
-  getYouTubeConnection,
-  listYouTubePlaylists,
   listPersonalSongs,
   loginAccount,
   logoutAccount,
@@ -41,14 +37,12 @@ import {
   registerAccount,
   requestPasswordReset,
   resetPassword,
-  retryYouTubePlaylist,
   selectYouTubeMatch,
-  startYouTubeAuthorization,
   updatePersonalSong,
   updateAccountProfile,
   verifyAccount,
 } from './services/personalPlaylists';
-import type { CreatedYouTubePlaylist, PersonalSong, SessionUser, YouTubeConnectionStatus, YouTubeMatch } from './services/personalPlaylists';
+import type { PersonalSong, SessionUser, YouTubeMatch } from './services/personalPlaylists';
 import type { ExpressionLabel, ExpressionPrediction } from './types';
 import type { PersonalDatasetContribution } from './services/personalDataset';
 
@@ -86,10 +80,6 @@ function routeParts(hash = window.location.hash): { page: AppPage; mood: Express
 
 function hashParams(): URLSearchParams {
   return new URLSearchParams(window.location.hash.split('?')[1] ?? '');
-}
-
-function moodPlaylistTitle(mood: ExpressionLabel | ''): string {
-  return mood ? `Moodify — ${mood[0].toUpperCase()}${mood.slice(1)}` : 'Moodify playlist';
 }
 
 export function App() {
@@ -134,19 +124,10 @@ export function App() {
   const [personalSongs, setPersonalSongs] = useState<PersonalSong[]>([]);
   const [playlistBusy, setPlaylistBusy] = useState(false);
   const [playlistError, setPlaylistError] = useState<string | null>(null);
-  const [youtubeConnection, setYoutubeConnection] = useState<YouTubeConnectionStatus>({ connected: false, google_email: null });
   const [youtubeError, setYoutubeError] = useState<string | null>(null);
-  const [youtubeFeedback, setYoutubeFeedback] = useState<string | null>(() => {
-    const status = hashParams().get('youtube');
-    return status === 'connected' ? 'YouTube account connected.'
-      : status ? `YouTube connection was not completed (${status.replaceAll('-', ' ')}).` : null;
-  });
-  const [youtubeBusy, setYoutubeBusy] = useState(false);
+  const [youtubeFeedback, setYoutubeFeedback] = useState<string | null>(null);
   const [matchBusyId, setMatchBusyId] = useState<string | null>(null);
   const [youtubeMatches, setYoutubeMatches] = useState<Record<string, YouTubeMatch[]>>({});
-  const [youtubePlaylistTitle, setYoutubePlaylistTitle] = useState(() => moodPlaylistTitle(routeParts().mood));
-  const [createdYoutubePlaylist, setCreatedYoutubePlaylist] = useState<CreatedYouTubePlaylist | null>(null);
-  const [createdYoutubePlaylists, setCreatedYoutubePlaylists] = useState<CreatedYouTubePlaylist[]>([]);
   const [editingSongId, setEditingSongId] = useState<string | null>(null);
   const [songEditDraft, setSongEditDraft] = useState({ title: '', artist: '' });
   const [songUpdateBusy, setSongUpdateBusy] = useState(false);
@@ -170,13 +151,6 @@ export function App() {
       if (route.mood) {
         setExpression(route.mood);
         setSongMood(route.mood);
-        setYoutubePlaylistTitle(moodPlaylistTitle(route.mood));
-      }
-      const youtubeStatus = hashParams().get('youtube');
-      if (youtubeStatus) {
-        setYoutubeFeedback(youtubeStatus === 'connected'
-          ? 'YouTube account connected.'
-          : `YouTube connection was not completed (${youtubeStatus.replaceAll('-', ' ')}).`);
       }
     }
 
@@ -196,7 +170,6 @@ export function App() {
   useEffect(() => {
     if (!session) {
       setPersonalSongs([]);
-      setYoutubeConnection({ connected: false, google_email: null });
       return;
     }
     let cancelled = false;
@@ -204,16 +177,6 @@ export function App() {
       .then((songs) => { if (!cancelled) setPersonalSongs(songs); })
       .catch((loadError: unknown) => {
         if (!cancelled) setPlaylistError(loadError instanceof Error ? loadError.message : 'Could not load your songs.');
-      });
-    void getYouTubeConnection(session.access_token)
-      .then((connection) => { if (!cancelled) setYoutubeConnection(connection); })
-      .catch((loadError: unknown) => {
-        if (!cancelled) setYoutubeError(loadError instanceof Error ? loadError.message : 'Could not check YouTube connection.');
-      });
-    void listYouTubePlaylists(session.access_token)
-      .then((playlists) => { if (!cancelled) setCreatedYoutubePlaylists(playlists); })
-      .catch((loadError: unknown) => {
-        if (!cancelled) setYoutubeError(loadError instanceof Error ? loadError.message : 'Could not load created YouTube playlists.');
       });
     return () => { cancelled = true; };
   }, [session]);
@@ -486,36 +449,6 @@ export function App() {
     }
   }
 
-  async function handleConnectYouTube() {
-    if (!session) return;
-    setYoutubeBusy(true);
-    setYoutubeError(null);
-    try {
-      const authorizationUrl = await startYouTubeAuthorization(session.access_token, songMood || undefined);
-      window.location.assign(authorizationUrl);
-    } catch (error: unknown) {
-      setYoutubeError(error instanceof Error ? error.message : 'Could not start YouTube authorization.');
-      setYoutubeBusy(false);
-    }
-  }
-
-  async function handleDisconnectYouTube() {
-    if (!session) return;
-    setYoutubeBusy(true);
-    setYoutubeError(null);
-    try {
-      const disconnected = await disconnectYouTube(session.access_token);
-      setYoutubeConnection(disconnected);
-      setYoutubeFeedback(disconnected.remote_revoked === false
-        ? 'YouTube was disconnected from Moodify, but Google could not confirm remote token revocation. You can revoke access in your Google account settings.'
-        : 'YouTube account disconnected and authorization revoked.');
-    } catch (error: unknown) {
-      setYoutubeError(error instanceof Error ? error.message : 'Could not disconnect YouTube.');
-    } finally {
-      setYoutubeBusy(false);
-    }
-  }
-
   async function handleFindYouTubeMatches(song: PersonalSong) {
     if (!session || !song.artist) {
       setYoutubeError('Add an artist before searching for a YouTube match.');
@@ -541,48 +474,12 @@ export function App() {
     try {
       const updatedSong = await selectYouTubeMatch(session.access_token, songId, match.video_id);
       setPersonalSongs((songs) => songs.map((song) => song.id === songId ? updatedSong : song));
+      setYoutubeMatches((matches) => ({ ...matches, [songId]: [match] }));
       setYoutubeFeedback(`Confirmed “${match.title}” by ${match.channel_title}.`);
     } catch (error: unknown) {
       setYoutubeError(error instanceof Error ? error.message : 'Could not confirm this YouTube match.');
     } finally {
       setMatchBusyId(null);
-    }
-  }
-
-  async function handleCreateYouTubePlaylist() {
-    if (!session || !songMood || !youtubePlaylistTitle.trim()) return;
-    setYoutubeBusy(true);
-    setYoutubeError(null);
-    setCreatedYoutubePlaylist(null);
-    try {
-      const created = await createYouTubePlaylist(session.access_token, songMood, youtubePlaylistTitle.trim());
-      setCreatedYoutubePlaylist(created);
-      setCreatedYoutubePlaylists((playlists) => [created, ...playlists]);
-      setYoutubeFeedback(created.status === 'created'
-        ? `Created a YouTube playlist with ${created.added_count} songs.`
-        : `Playlist created with ${created.added_count} songs; some tracks could not be added.`);
-    } catch (error: unknown) {
-      setYoutubeError(error instanceof Error ? error.message : 'Could not create the YouTube playlist.');
-    } finally {
-      setYoutubeBusy(false);
-    }
-  }
-
-  async function handleRetryYouTubePlaylist(playlistId: string) {
-    if (!session) return;
-    setYoutubeBusy(true);
-    setYoutubeError(null);
-    try {
-      const updated = await retryYouTubePlaylist(session.access_token, playlistId);
-      setCreatedYoutubePlaylists((playlists) => playlists.map((playlist) => playlist.id === updated.id ? updated : playlist));
-      setCreatedYoutubePlaylist((playlist) => playlist?.id === updated.id ? updated : playlist);
-      setYoutubeFeedback(updated.status === 'created'
-        ? `All remaining songs were added to “${updated.title}”.`
-        : `Retry completed; ${updated.failed_song_ids.length} songs still need to be added.`);
-    } catch (error: unknown) {
-      setYoutubeError(error instanceof Error ? error.message : 'Could not retry failed YouTube playlist items.');
-    } finally {
-      setYoutubeBusy(false);
     }
   }
 
@@ -847,8 +744,6 @@ export function App() {
   const playlistChoices = getPlaylistChoices(expression || null);
   const moodPersonalSongs = expression ? personalSongs.filter((song) => song.mood === expression) : [];
   const creatorPersonalSongs = songMood ? personalSongs.filter((song) => song.mood === songMood) : [];
-  const allCreatorSongsMatched = creatorPersonalSongs.length > 0
-    && creatorPersonalSongs.every((song) => song.artist && song.youtube_video_id);
   const expressionName = expression ? `${expression[0].toUpperCase()}${expression.slice(1)}` : '';
   const moodHeading = expression
     ? expression === prediction?.expression
@@ -1094,8 +989,6 @@ export function App() {
                     onChange={(event) => {
                       const mood = event.target.value as ExpressionLabel | '';
                       setSongMood(mood);
-                      setYoutubePlaylistTitle(moodPlaylistTitle(mood));
-                      setCreatedYoutubePlaylist(null);
                     }}
                     required
                   >
@@ -1134,6 +1027,8 @@ export function App() {
                 <h2>{songMood ? `${songMood[0].toUpperCase()}${songMood.slice(1)} songs` : 'Choose a mood to get started'}</h2>
                 <p>{creatorPersonalSongs.length} song{creatorPersonalSongs.length === 1 ? '' : 's'} saved for this mood.</p>
               </div>
+              {youtubeFeedback ? <p role="status">{youtubeFeedback}</p> : null}
+              {youtubeError ? <p className="error" role="alert">{youtubeError}</p> : null}
               {creatorPersonalSongs.length ? (
                 <ul className="personal-song-list">
                   {creatorPersonalSongs.map((song) => (
@@ -1182,9 +1077,9 @@ export function App() {
                                     <span><strong>{match.title}</strong><small>{match.channel_title}</small></span>
                                     <button
                                       type="button"
-                                      disabled={matchBusyId === song.id}
+                                      disabled={matchBusyId === song.id || song.youtube_video_id === match.video_id}
                                       onClick={() => void handleChooseYouTubeMatch(song.id, match)}
-                                    >Use this video</button>
+                                    >{song.youtube_video_id === match.video_id ? 'Selected' : 'Use this video'}</button>
                                   </li>
                                 ))}
                               </ul>
@@ -1199,75 +1094,6 @@ export function App() {
                   ))}
                 </ul>
               ) : <p className="empty-state">No songs added to this mood yet.</p>}
-              {creatorPersonalSongs.length ? (
-                <section className="youtube-playlist-builder" aria-label="Create a YouTube playlist">
-                  <div className="results-heading">
-                    <h2>Create a YouTube playlist</h2>
-                    <p>Review each song’s YouTube match, then create a private playlist in your connected YouTube account.</p>
-                  </div>
-                  {youtubeConnection.connected ? (
-                    <div className="youtube-connection-status" role="status">
-                      <span>Connected{youtubeConnection.google_email ? ` as ${youtubeConnection.google_email}` : ''}</span>
-                      <button type="button" className="text-button" disabled={youtubeBusy} onClick={() => void handleDisconnectYouTube()}>Disconnect</button>
-                    </div>
-                  ) : (
-                    <button type="button" onClick={() => void handleConnectYouTube()} disabled={youtubeBusy}>
-                      {youtubeBusy ? 'Connecting…' : 'Connect YouTube account'}
-                    </button>
-                  )}
-                  {youtubeFeedback ? <p role="status">{youtubeFeedback}</p> : null}
-                  {youtubeError ? <p className="error" role="alert">{youtubeError}</p> : null}
-                  {youtubeConnection.connected ? (
-                    <>
-                      <label htmlFor="youtube-playlist-title">Playlist name
-                        <input
-                          id="youtube-playlist-title"
-                          value={youtubePlaylistTitle}
-                          onChange={(event) => setYoutubePlaylistTitle(event.target.value)}
-                          maxLength={150}
-                          required
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => void handleCreateYouTubePlaylist()}
-                        disabled={youtubeBusy || !allCreatorSongsMatched || !youtubePlaylistTitle.trim()}
-                      >
-                        {youtubeBusy ? 'Creating playlist…' : `Create YouTube playlist (${creatorPersonalSongs.length} songs)`}
-                      </button>
-                      {!allCreatorSongsMatched ? <small>Enter an artist and confirm a YouTube match for every song above to continue.</small> : null}
-                    </>
-                  ) : null}
-                  {createdYoutubePlaylist ? (
-                    <p role="status">
-                      <a href={createdYoutubePlaylist.url} target="_blank" rel="noopener noreferrer">
-                        Open “{createdYoutubePlaylist.title}” on YouTube ↗
-                      </a>
-                      {createdYoutubePlaylist.status === 'partial'
-                        ? ` · ${createdYoutubePlaylist.added_count} songs added; some could not be added.`
-                        : ` · ${createdYoutubePlaylist.added_count} songs added.`}
-                    </p>
-                  ) : null}
-                  {createdYoutubePlaylists.some((playlist) => playlist.mood === songMood) ? (
-                    <div className="youtube-playlist-history" aria-label={`${songMood} YouTube playlists`}>
-                      <h3>Your {songMood} YouTube playlists</h3>
-                      <ul>
-                        {createdYoutubePlaylists.filter((playlist) => playlist.mood === songMood).map((playlist) => (
-                          <li key={playlist.id}>
-                            <a href={playlist.url} target="_blank" rel="noopener noreferrer">{playlist.title} ↗</a>
-                            <span>{playlist.added_count} added · {playlist.status}</span>
-                            {playlist.status === 'partial' ? (
-                              <button type="button" className="text-button" disabled={youtubeBusy} onClick={() => void handleRetryYouTubePlaylist(playlist.id)}>
-                                {youtubeBusy ? 'Retrying…' : `Retry ${playlist.failed_song_ids.length} failed songs`}
-                              </button>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </section>
-              ) : null}
               {songMood ? <a className="back-to-discover" href={`#playlists?mood=${songMood}`}>View {songMood} playlist ideas →</a> : null}
             </section>
           )}

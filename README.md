@@ -37,11 +37,14 @@ python -m venv .venv
 pip install -r requirements.txt
 alembic upgrade head
 python -m app.services.model_download
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host ::
 ```
 
-The local defaults configure PostgreSQL at `localhost:5432`, Mailpit SMTP at `localhost:1025`, and the frontend at
-`http://localhost:5173`. Configure `MOODIFY_DATABASE_URL`, `MOODIFY_ENVIRONMENT`, `MOODIFY_JWT_SECRET`, `MOODIFY_CORS_ORIGINS`, `MOODIFY_FRONTEND_URL`,
+The backend binds all interfaces so the browser can return to its localhost OAuth callback. The Vite development
+server proxies `/api/v1` requests to the backend over IPv4, avoiding browser localhost/CORS mismatches. The local
+defaults configure PostgreSQL at `localhost:5432`, Mailpit SMTP at `localhost:1025`, and the frontend at
+`http://localhost:5173`. Configure `MOODIFY_DATABASE_URL`, `MOODIFY_ENVIRONMENT`, `MOODIFY_JWT_SECRET`,
+`MOODIFY_CORS_ORIGINS`, `MOODIFY_FRONTEND_URL`,
 `MOODIFY_COOKIE_SECURE`, `MOODIFY_SMTP_HOST`, `MOODIFY_SMTP_PORT`, `MOODIFY_SMTP_USERNAME`,
 `MOODIFY_SMTP_PASSWORD`, `MOODIFY_SMTP_FROM_EMAIL`, and `MOODIFY_SMTP_STARTTLS` for other environments. Replace
 the development JWT secret, use HTTPS with secure cookies, protect database and SMTP credentials, and provide a
@@ -104,6 +107,14 @@ To enable the YouTube integration, configure backend-only `MOODIFY_YOUTUBE_CLIEN
 `MOODIFY_YOUTUBE_TOKEN_ENCRYPTION_KEY` values in the backend environment. Enable YouTube Data API v3 in Google Cloud,
 configure the OAuth consent screen and exact redirect URI (for local development, the example callback is
 `http://localhost:8000/api/v1/youtube/oauth/callback`), and add test accounts while the consent screen is in testing.
+For local development, create `backend/.env` and add the required values there; in particular, song matching needs
+`MOODIFY_YOUTUBE_API_KEY` to be a key from a Google Cloud project with YouTube Data API v3 enabled. Restart the backend
+after changing its environment; the development server does not reload when only `.env` changes. Playlist creation
+also requires the OAuth client ID, client secret, callback URI, encryption key, and a YouTube account connected from
+the app. Restrict the server-side API key to YouTube Data API v3 and an appropriate server application restriction;
+do not use browser HTTP-referrer restrictions for a key sent by the backend. If the browser reports that it cannot
+reach the Moodify API, check that the backend is running and `VITE_API_BASE_URL` points to the correct API when
+bypassing the development proxy.
 Generate the encryption key using the command in `.env.example`; protect it like a database credential and retain it
 across restarts. Search and playlist writes consume Google API quota, and public rollout may require OAuth app
 verification. The match is user-confirmed because YouTube search can return covers, live versions, or incorrect tracks.

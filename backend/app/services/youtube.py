@@ -49,7 +49,12 @@ def _oauth_configuration() -> tuple[str, str, str, str]:
     redirect_uri = settings.youtube_redirect_uri
     encryption_key = settings.youtube_token_encryption_key
     if not client_id or not client_secret or not redirect_uri or not encryption_key:
-        raise YouTubeProviderError("YouTube authorization is not configured on this server.", 503)
+        raise YouTubeProviderError(
+            "YouTube playlist authorization is not configured. Set MOODIFY_YOUTUBE_CLIENT_ID, "
+            "MOODIFY_YOUTUBE_CLIENT_SECRET, MOODIFY_YOUTUBE_REDIRECT_URI, and "
+            "MOODIFY_YOUTUBE_TOKEN_ENCRYPTION_KEY in the backend environment, then restart the backend.",
+            503,
+        )
     try:
         Fernet(encryption_key.encode())
     except ValueError as error:
@@ -59,7 +64,10 @@ def _oauth_configuration() -> tuple[str, str, str, str]:
 
 def require_search_config() -> None:
     if not settings.youtube_api_key:
-        raise YouTubeProviderError("YouTube search is not configured on this server.", 503)
+        raise YouTubeProviderError(
+            "YouTube search is not configured on this server. Set MOODIFY_YOUTUBE_API_KEY to a YouTube Data API v3 key and restart the backend.",
+            503,
+        )
 
 
 def encrypt_refresh_token(token: str) -> str:
@@ -94,6 +102,43 @@ def _check_response(response: httpx.Response, operation: str) -> dict[str, Any]:
     try:
         response.raise_for_status()
         body = response.json()
+    except httpx.HTTPStatusError as error:
+        if operation == "search":
+            try:
+                payload = response.json()
+            except ValueError:
+                payload = {}
+            error_data = payload.get("error", {}) if isinstance(payload, dict) else {}
+            errors = error_data.get("errors", []) if isinstance(error_data, dict) else []
+            reason = errors[0].get("reason") if errors and isinstance(errors[0], dict) else None
+            messages = {
+                "accessNotConfigured": (
+                    "YouTube Data API v3 is not enabled for the Google Cloud project associated with "
+                    "MOODIFY_YOUTUBE_API_KEY. Enable the API in Google Cloud Console."
+                ),
+                "keyInvalid": "Google rejected MOODIFY_YOUTUBE_API_KEY. Verify the key and restart the backend.",
+                "API_KEY_INVALID": "Google rejected MOODIFY_YOUTUBE_API_KEY. Verify the key and restart the backend.",
+                "quotaExceeded": "YouTube Data API quota is exhausted. Check the project's quota in Google Cloud Console.",
+                "dailyLimitExceeded": "YouTube Data API daily quota is exhausted. Check the project's quota in Google Cloud Console.",
+                "rateLimitExceeded": "YouTube Data API rate limit was reached. Wait and try again.",
+                "ipRefererBlocked": (
+                    "Google blocked the YouTube API key because of its application restrictions. "
+                    "Check the key restrictions in Google Cloud Console."
+                ),
+                "API_KEY_HTTP_REFERRER_BLOCKED": (
+                    "Google blocked the YouTube API key because of its application restrictions. "
+                    "Check the key restrictions in Google Cloud Console."
+                ),
+            }
+            message = messages.get(reason)
+            if message is None:
+                message = (
+                    f"YouTube search failed at Google (HTTP {response.status_code}). Check that YouTube Data API v3 "
+                    "is enabled, the API key is valid and unrestricted for this backend, and quota is available."
+                )
+            raise YouTubeProviderError(message, 502) from error
+        status_code = response.status_code if response.status_code >= 400 else 502
+        raise YouTubeProviderError(f"YouTube provider {operation} failed.", status_code) from error
     except (httpx.HTTPError, ValueError) as error:
         status_code = response.status_code if response.status_code >= 400 else 502
         raise YouTubeProviderError(f"YouTube provider {operation} failed.", status_code) from error

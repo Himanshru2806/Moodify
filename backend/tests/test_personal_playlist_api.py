@@ -189,6 +189,30 @@ def test_youtube_match_review_and_playlist_creation_are_user_scoped(api_client, 
     assert client.get(f"/api/v1/youtube/songs/{song_id}/matches", headers={"Authorization": f"Bearer {other_access}"}).status_code == 404
 
 
+def test_youtube_search_reports_missing_api_key(api_client, monkeypatch: pytest.MonkeyPatch) -> None:
+    client, sent = api_client
+    access = register_and_login(client, sent, "youtube-config@example.com")
+    headers = {"Authorization": f"Bearer {access}"}
+    created = client.post(
+        "/api/v1/personal-playlists/songs",
+        headers=headers,
+        json={"mood": "happy", "title": "Yellow", "artist": "Coldplay"},
+    )
+    assert created.status_code == 201
+    monkeypatch.setattr(settings, "youtube_api_key", None)
+
+    response = client.get(
+        f"/api/v1/youtube/songs/{created.json()['id']}/matches",
+        headers=headers,
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "YouTube search is not configured on this server. Set MOODIFY_YOUTUBE_API_KEY "
+        "to a YouTube Data API v3 key and restart the backend."
+    )
+
+
 def test_youtube_oauth_state_is_single_use_user_bound_and_refresh_token_encrypted(api_client, monkeypatch: pytest.MonkeyPatch) -> None:
     client, sent = api_client
     access = register_and_login(client, sent, "oauth-listener@example.com")
